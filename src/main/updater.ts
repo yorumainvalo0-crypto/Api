@@ -33,8 +33,7 @@ export function initUpdater(): void {
     }
   })
   autoUpdater.on('error', (error) => {
-    // Typical causes: no releases yet, private repository, offline.
-    status = { state: 'error', message: `Update-Prüfung fehlgeschlagen: ${error.message}` }
+    status = describeUpdateError(error)
   })
   void checkForUpdates()
 }
@@ -44,12 +43,24 @@ export async function checkForUpdates(): Promise<UpdateStatus> {
   try {
     await autoUpdater.checkForUpdates()
   } catch (error) {
-    status = {
-      state: 'error',
-      message: `Update-Prüfung fehlgeschlagen: ${error instanceof Error ? error.message : String(error)}`,
-    }
+    status = describeUpdateError(error)
   }
   return status
+}
+
+/** Turns updater errors into a German status; "no release yet" is not an error for the user. */
+export function describeUpdateError(error: unknown): UpdateStatus {
+  const message = error instanceof Error ? error.message : String(error)
+  if (/no published versions|Unable to find latest version|HttpError: 404/i.test(message)) {
+    return {
+      state: 'not-available',
+      message: `Aktuell (Version ${app.getVersion()}) – auf GitHub ist noch keine neuere Version veröffentlicht.`,
+    }
+  }
+  if (/ENOTFOUND|EAI_AGAIN|ECONNREFUSED|ETIMEDOUT|net::ERR_/i.test(message)) {
+    return { state: 'error', message: 'Update-Prüfung fehlgeschlagen: keine Internetverbindung.' }
+  }
+  return { state: 'error', message: `Update-Prüfung fehlgeschlagen: ${message.split('\n')[0]}` }
 }
 
 export function updateStatus(): UpdateStatus {

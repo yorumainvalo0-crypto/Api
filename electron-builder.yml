@@ -32,3 +32,5 @@ publish:
   provider: github
   owner: yorumainvalo0-crypto
   repo: Api
+  # Publish immediately; drafts are invisible to the installed app's updater.
+  releaseType: release

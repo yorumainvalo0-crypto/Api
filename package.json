@@ -1,7 +1,7 @@
 {
   "name": "ai-workbench",
   "productName": "AI Workbench",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "description": "Personal desktop AI workbench for coding, chat, web research and media.",
   "author": "Michael Weiss",

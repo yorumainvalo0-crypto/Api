@@ -3,7 +3,7 @@
 Laufendes Protokoll zur Umsetzung von [`PLAN.md`](./PLAN.md).
 Zeiten in UTC. Legende: ✅ fertig · 🔄 in Arbeit · ⏳ offen · ⚠️ Problem/Hinweis
 
-**Letztes Update:** 2026-10-10 17:03
+**Letztes Update:** 2026-10-10 17:12
 
 ## Gesamtstatus
 
@@ -26,7 +26,7 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
 | Prüfung                                                                      | Ergebnis |
 | ---------------------------------------------------------------------------- | -------- |
 | TypeScript strict + ESLint                                                   | ✅       |
-| Unit- und Integrationstests (33 Dateien)                                     | ✅ 261   |
+| Unit- und Integrationstests (34 Dateien)                                     | ✅ 263   |
 | Integration mit echtem Runtime (Chat, Coding, Web, Medien, Add-ons, ComfyUI) | ✅       |
 | Integration: Handschrift-OCR (Ollama) und Office lesen/erstellen             | ✅       |
 | Live-Test echte Websuche (optional, `AIW_LIVE_WEB=1`)                        | ✅       |
@@ -34,6 +34,19 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
 | Windows-CI: Tests, Installer, Smoke-Test der installierten App               | ✅       |
 
 ## Protokoll
+
+### 2026-10-10 17:12 – Updates: erstes Release v0.2.0 🔄
+
+- **Ursache der Meldung „No published versions on GitHub“:** Es gab noch kein Release, nur
+  CI-Artefakte. Die App kann sich aber nur über Releases aktualisieren.
+- **Verständliche Meldung:** Statt eines Fehlers steht jetzt „Aktuell – auf GitHub ist noch
+  keine neuere Version veröffentlicht“. Ohne Internet heißt es „keine Internetverbindung“.
+- **Releases werden direkt veröffentlicht.** Vorher wären sie als Entwurf angelegt worden,
+  den die App nicht sieht.
+- **Version 0.2.0:** Der Tag `v0.2.0` startet den Release-Workflow. Er baut den Installer und
+  veröffentlicht ihn unter GitHub → Releases. Deine installierte 0.1.0 findet das Update dann
+  selbst.
+- Getestet: 2 neue Tests, gesamt 263 Tests, Smoke-Test OK.
 
 ### 2026-10-10 17:03 – Jev (TypeSafe) als Werkzeug für jedes Modell ✅
 
