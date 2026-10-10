@@ -23,6 +23,8 @@ export const SettingsSchema = z.object({
   theme: z.enum(['system', 'light', 'dark']).default('system'),
   /** Allow the agent to search the web and read pages (free, no API key). */
   webAccess: z.boolean().default(true),
+  /** OpenRouter model used by the generate_image tool. */
+  imageModel: z.string().default('google/gemini-3.1-flash-lite-image'),
 })
 export type Settings = z.infer<typeof SettingsSchema>
 
@@ -42,6 +44,7 @@ export const SettingsPatchSchema = z
     ollamaBaseUrl: z.url(),
     theme: z.enum(['system', 'light', 'dark']),
     webAccess: z.boolean(),
+    imageModel: z.string(),
   })
   .partial()
 export type SettingsPatch = z.infer<typeof SettingsPatchSchema>

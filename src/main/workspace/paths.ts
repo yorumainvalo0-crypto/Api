@@ -6,8 +6,8 @@ export function isInside(dir: string, path: string): boolean {
   return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel)
 }
 
-/** Resolves an aiw-file URL to a path, or undefined if it points outside the allowed root. */
-export function resolveFileUrl(url: string, root: string): string | undefined {
+/** Resolves an aiw-file URL to a path, or undefined if it points outside every allowed root. */
+export function resolveFileUrl(url: string, root: string | string[]): string | undefined {
   let pathname: string
   try {
     pathname = new URL(url).pathname
@@ -15,5 +15,6 @@ export function resolveFileUrl(url: string, root: string): string | undefined {
     return undefined
   }
   const target = resolve(decodeURIComponent(pathname.replace(/^\/+/, '')))
-  return isInside(root, target) ? target : undefined
+  const roots = Array.isArray(root) ? root : [root]
+  return roots.some((r) => isInside(r, target)) ? target : undefined
 }

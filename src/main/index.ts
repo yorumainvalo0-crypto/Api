@@ -1,5 +1,7 @@
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
+import { copyFileSync } from 'node:fs'
+import { basename } from 'node:path'
 import { app, BrowserWindow, dialog, safeStorage, shell } from 'electron'
 import log from 'electron-log/main'
 import pkg from '../../package.json'
@@ -8,6 +10,7 @@ import { resolveClaudeExecutable } from './agent/executable'
 import { registerIpcHandlers, sendEvent } from './ipc/register'
 import { listModels, testConnection } from './providers/model-catalog'
 import { createProjectHandlers } from './project/handlers'
+import { isAllowedPath, isExecutable, listOutputs, outputsDir } from './media/outputs'
 import { ChatRepository } from './storage/chat-repository'
 import { openDatabase } from './storage/database'
 import { SecretStore } from './storage/secret-store'
@@ -74,7 +77,16 @@ function bootstrap(): void {
   })
 
   const chats = new ChatRepository(openDatabase(join(dataDir, 'workbench.db')))
-  handleFileProtocol(dataDir)
+  // Files may be served/saved from the data dir and from project folders the user opened.
+  const allowedRoots = () => [
+    dataDir,
+    ...chats.list().flatMap((c) => (c.projectPath ? [c.projectPath] : [])),
+  ]
+  const assertAllowed = (path: string) => {
+    if (!isAllowedPath(path, allowedRoots()))
+      throw new Error('Zugriff auf diese Datei ist nicht erlaubt.')
+  }
+  handleFileProtocol(allowedRoots)
 
   const catalogArgs = (provider: Parameters<typeof listModels>[0]['provider']) => ({
     provider,
@@ -166,6 +178,30 @@ function bootstrap(): void {
         properties: ['openFile', 'multiSelections'],
       })
       return result.canceled ? [] : result.filePaths
+    },
+    'outputs:list': ({ chatId }) => {
+      const chat = chats.summary(chatId)
+      return chat ? listOutputs(outputsDir(dataDir, chat)) : []
+    },
+    'files:save-as': async ({ path }) => {
+      assertAllowed(path)
+      if (!mainWindow) return { savedTo: null }
+      const result = await dialog.showSaveDialog(mainWindow, { defaultPath: basename(path) })
+      if (result.canceled || !result.filePath) return { savedTo: null }
+      copyFileSync(path, result.filePath)
+      return { savedTo: result.filePath }
+    },
+    'files:show-in-folder': ({ path }) => {
+      assertAllowed(path)
+      shell.showItemInFolder(path)
+      return { ok: true }
+    },
+    'files:open-external': async ({ path }) => {
+      assertAllowed(path)
+      // Never launch programs or scripts the agent may have written.
+      if (isExecutable(path))
+        throw new Error('Ausführbare Dateien werden aus Sicherheitsgründen nicht geöffnet.')
+      return { ok: (await shell.openPath(path)) === '' }
     },
     'agent:send': (request) => ({ accepted: sessions.send(request) }),
     'agent:cancel': ({ chatId }) => ({ ok: sessions.cancel(chatId) }),

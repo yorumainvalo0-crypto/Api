@@ -19,10 +19,13 @@ export function registerFileProtocolScheme(): void {
   ])
 }
 
-/** Serves files from the app data directory only – never arbitrary paths. */
-export function handleFileProtocol(root: string): void {
+/**
+ * Serves files from the app data directory and from project folders the user opened –
+ * never arbitrary paths.
+ */
+export function handleFileProtocol(getRoots: () => string[]): void {
   protocol.handle(FILE_PROTOCOL, async (request) => {
-    const target = resolveFileUrl(request.url, root)
+    const target = resolveFileUrl(request.url, getRoots())
     if (!target) return new Response('Forbidden', { status: 403 })
     const response = await net.fetch(pathToFileURL(target).toString())
     // The renderer runs from file:// (origin "null"); allow it to fetch e.g. 3D models.

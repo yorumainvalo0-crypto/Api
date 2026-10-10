@@ -15,6 +15,7 @@ import {
 } from './schemas/chat'
 import { ConnectionTestResultSchema, ModelInfoSchema } from './schemas/models'
 import { projectContract, projectEvents } from './ipc-project'
+import { OutputFileSchema } from './schemas/media'
 
 const ChatIdInput = z.object({ chatId: z.string().min(1) })
 
@@ -68,6 +69,20 @@ export const ipcContract = {
     output: z.object({ attachments: z.array(AttachmentSchema), errors: z.array(z.string()) }),
   },
   'dialog:open-files': { input: z.void(), output: z.array(z.string()) },
+  /** Files the agent produced in a chat (images, 3D models, documents), newest first. */
+  'outputs:list': { input: ChatIdInput, output: z.array(OutputFileSchema) },
+  'files:save-as': {
+    input: z.object({ path: z.string().min(1) }),
+    output: z.object({ savedTo: z.string().nullable() }),
+  },
+  'files:show-in-folder': {
+    input: z.object({ path: z.string().min(1) }),
+    output: z.object({ ok: z.boolean() }),
+  },
+  'files:open-external': {
+    input: z.object({ path: z.string().min(1) }),
+    output: z.object({ ok: z.boolean() }),
+  },
   'dialog:open-folder': { input: z.void(), output: z.string().nullable() },
   'agent:send': { input: ChatRequestSchema, output: z.object({ accepted: z.boolean() }) },
   'agent:cancel': { input: ChatIdInput, output: z.object({ ok: z.boolean() }) },
