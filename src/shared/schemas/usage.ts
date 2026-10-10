@@ -29,6 +29,8 @@ export const UsageSummarySchema = z.object({
   total: UsageTotalsSchema,
   byProvider: z.array(UsageTotalsSchema.extend({ provider: ProviderIdSchema })),
   byModel: z.array(UsageTotalsSchema.extend({ provider: ProviderIdSchema, model: z.string() })),
+  /** Main agent, Cowork roles (subagents), router and terminal sessions. */
+  byAgent: z.array(UsageTotalsSchema.extend({ agent: z.string() })),
   /** Hours of today for "today", calendar days otherwise. */
   granularity: z.enum(['hour', 'day']),
   /** Continuous time series (empty buckets included), oldest first. */

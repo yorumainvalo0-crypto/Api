@@ -68,6 +68,10 @@ const MIGRATIONS: Migration[] = [
     `)
     backfillUsage(db)
   },
+  // v4: which agent produced the usage ('main', a Cowork role, 'router', 'terminal').
+  `
+  ALTER TABLE usage ADD COLUMN agent TEXT NOT NULL DEFAULT 'main';
+  `,
 ]
 
 /**
