@@ -22,6 +22,8 @@ win:
       arch: [x64]
   executableName: ai-workbench
 nsis:
+  # No spaces: GitHub turns them into dots, which would break the URL in latest.yml.
+  artifactName: AI-Workbench-Setup-${version}.${ext}
   oneClick: false
   perMachine: false
   allowToChangeInstallationDirectory: true

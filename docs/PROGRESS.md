@@ -3,7 +3,7 @@
 Laufendes Protokoll zur Umsetzung von [`PLAN.md`](./PLAN.md).
 Zeiten in UTC. Legende: ✅ fertig · 🔄 in Arbeit · ⏳ offen · ⚠️ Problem/Hinweis
 
-**Letztes Update:** 2026-10-10 17:12
+**Letztes Update:** 2026-10-10 17:27
 
 ## Gesamtstatus
 
@@ -48,6 +48,13 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
   Cloud-Umgebung. Der Workflow testet auf Windows, baut den Installer und veröffentlicht ihn
   unter GitHub → Releases. Deine installierte 0.1.0 findet das Update dann selbst.
 - Getestet: 2 neue Tests, gesamt 263 Tests, Smoke-Test OK.
+- ⚠️ **Zwei Fehler beim ersten Veröffentlichen behoben:**
+  - electron-builder hat beim Hochladen `latest.yml` ausgelassen. Ohne diese Datei findet die
+    App kein Update. Jetzt laden wir selbst hoch, und unvollständige Releases werden
+    automatisch repariert.
+  - Der Installer-Name enthielt Leerzeichen, die GitHub zu Punkten macht. Dadurch passte der
+    Link in `latest.yml` nicht mehr zur Datei. Der Installer heißt jetzt
+    `AI-Workbench-Setup-<version>.exe`.
 
 ### 2026-10-10 17:03 – Jev (TypeSafe) als Werkzeug für jedes Modell ✅
 

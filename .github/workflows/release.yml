@@ -31,12 +31,15 @@ jobs:
         run: |
           version=$(node -p "require('./package.json').version")
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          # Publish when the release is missing or incomplete (the updater needs latest.yml).
-          assets=$(gh release view "v$version" --repo "${{ github.repository }}" --json assets -q '.assets[].name' 2>/dev/null || true)
-          if echo "$assets" | grep -qx 'latest.yml'; then
+          # Publish when the release is missing or incomplete: the updater needs latest.yml plus the
+          # installer and blockmap it names, and stray files point to a broken earlier upload.
+          assets=$(gh release view "v$version" --repo "${{ github.repository }}" --json assets -q '.assets[].name' 2>/dev/null | sort || true)
+          expected=$(printf '%s\n' "AI-Workbench-Setup-$version.exe" "AI-Workbench-Setup-$version.exe.blockmap" latest.yml | sort)
+          if [ "$assets" = "$expected" ]; then
             echo "v$version is already released."
             echo "publish=false" >> "$GITHUB_OUTPUT"
           else
+            echo "Release assets: ${assets:-none} – publishing."
             echo "publish=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -70,6 +73,14 @@ jobs:
             gh release create "v$version" --target "$GITHUB_SHA" \
               --title "AI Workbench $version" --generate-notes
           fi
+          installer="AI-Workbench-Setup-$version.exe"
           gh release upload "v$version" --clobber \
-            "$dir"/*.exe "$dir"/*.exe.blockmap "$dir"/latest.yml
+            "$dir/$installer" "$dir/$installer.blockmap" "$dir/latest.yml"
+          # Remove leftovers from earlier uploads (e.g. names with dots instead of spaces).
+          gh release view "v$version" --json assets -q '.assets[].name' | while read -r name; do
+            case "$name" in
+              "$installer" | "$installer.blockmap" | latest.yml) ;;
+              *) gh release delete-asset "v$version" "$name" --yes ;;
+            esac
+          done
           gh release view "v$version" --json assets -q '.assets[].name'

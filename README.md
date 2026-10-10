@@ -25,7 +25,7 @@ Der Agent-Kern ist das **Claude Agent SDK** (derselbe Kern wie Claude Code).
 ## Installation (Windows)
 
 **Einfach:** Unter GitHub → _Actions_ → letzter „CI“-Lauf → Artefakt `ai-workbench-windows`
-herunterladen und `AI Workbench Setup <version>.exe` ausführen. (Ohne Code-Signatur zeigt
+herunterladen und `AI-Workbench-Setup-<version>.exe` ausführen. (Ohne Code-Signatur zeigt
 Windows SmartScreen eine Warnung → „Weitere Informationen“ → „Trotzdem ausführen“.)
 
 **Releases & Auto-Update:** Version in `package.json` erhöhen und nach `main` pushen. GitHub
