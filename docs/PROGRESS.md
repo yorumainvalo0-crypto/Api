@@ -58,6 +58,7 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
     Ticket ein.
   - Ohne Key oder wenn ausgeschaltet, wird das Werkzeug nicht angeboten.
   - Gesamt: 261 Tests, Smoke-Test OK.
+- **Windows-CI grün** (Tests, Installer, Smoke-Test der installierten App) → nach `main` gepusht.
 
 ### 2026-10-10 16:56 – Menüs schließen beim Klick daneben ✅
 
