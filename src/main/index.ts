@@ -13,6 +13,7 @@ import { createProjectHandlers } from './project/handlers'
 import { AddonStore } from './addons/addon-store'
 import { createAddonHandlers } from './addons/handlers'
 import { ComfyClient } from './media/comfy-client'
+import { isUsable, listComfyModels, noModelMessage } from './media/comfy-models'
 import { discoverLocalServices } from './media/discovery'
 import { OllamaVision } from './media/ocr'
 import { classify, detectMime } from './workspace/attachments'
@@ -221,20 +222,35 @@ function bootstrap(): void {
       return { text }
     },
     'comfy:status': async () => {
-      const client = new ComfyClient({ baseUrl: settings.get().comfyUrl })
+      const url = settings.get().comfyUrl
+      const client = new ComfyClient({ baseUrl: url })
       try {
         const { version } = await client.systemStats()
-        const checkpoints = await client.checkpoints()
+        const inventory = await client.inventory()
+        const models = listComfyModels(inventory)
+        const usable = models.filter(isUsable).length
         return {
           ok: true,
-          message: `Verbunden mit ComfyUI ${version} (${checkpoints.length} Checkpoints).`,
-          checkpoints,
+          message:
+            `Verbunden mit ComfyUI ${version}: ${inventory.checkpoints.length} Checkpoints, ` +
+            `${inventory.diffusionModels.length} Diffusionsmodelle (${usable} Modelle nutzbar).` +
+            (usable === 0 ? ` ${noModelMessage(models)}` : ''),
+          checkpoints: inventory.checkpoints,
+          models,
+          suggestions: [],
         }
       } catch (error) {
+        // Not reachable: look for ComfyUI on the usual ports (Desktop app 8000, Pinokio 8188 …).
+        const found = await discoverLocalServices({ timeoutMs: 600 }).catch(() => undefined)
+        const suggestions = (found?.comfy ?? []).map((c) => c.url).filter((u) => u !== url)
         return {
           ok: false,
-          message: error instanceof Error ? error.message : String(error),
+          message:
+            (error instanceof Error ? error.message : String(error)) +
+            (suggestions.length > 0 ? ` Gefunden: ${suggestions.join(', ')}.` : ''),
           checkpoints: [],
+          models: [],
+          suggestions,
         }
       }
     },

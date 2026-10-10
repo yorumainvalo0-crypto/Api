@@ -58,7 +58,22 @@ export interface MockComfy {
  * Minimal ComfyUI API mock: /system_stats, /object_info, /upload/image, /prompt, /history, /view.
  * Workflows with a "SaveGLB" node return a GLB mesh, everything else a PNG.
  */
-export async function startMockComfy(): Promise<MockComfy> {
+export interface MockComfyModels {
+  checkpoints?: string[]
+  unets?: string[]
+  clips?: string[]
+  vaes?: string[]
+}
+
+export async function startMockComfy(
+  models: MockComfyModels = { checkpoints: ['sdxl_base.safetensors', 'sd15.ckpt'] },
+): Promise<MockComfy> {
+  const loaders: Record<string, [string, string[]]> = {
+    CheckpointLoaderSimple: ['ckpt_name', models.checkpoints ?? []],
+    UNETLoader: ['unet_name', models.unets ?? []],
+    CLIPLoader: ['clip_name', models.clips ?? []],
+    VAELoader: ['vae_name', models.vaes ?? []],
+  }
   const prompts: MockComfy['prompts'] = []
   const uploads: string[] = []
   const pending = new Map<string, { is3d: boolean; polls: number }>()
@@ -75,12 +90,11 @@ export async function startMockComfy(): Promise<MockComfy> {
       if (url.pathname === '/system_stats') {
         return json(200, { system: { comfyui_version: '0.9.9-mock' } })
       }
-      if (url.pathname === '/object_info/CheckpointLoaderSimple') {
-        return json(200, {
-          CheckpointLoaderSimple: {
-            input: { required: { ckpt_name: [['sdxl_base.safetensors', 'sd15.ckpt'], {}] } },
-          },
-        })
+      if (url.pathname.startsWith('/object_info/')) {
+        const node = decodeURIComponent(url.pathname.slice('/object_info/'.length))
+        const loader = loaders[node]
+        if (!loader) return json(200, {})
+        return json(200, { [node]: { input: { required: { [loader[0]]: [loader[1], {}] } } } })
       }
       if (url.pathname === '/upload/image' && req.method === 'POST') {
         const body = Buffer.concat(chunks).toString('latin1')

@@ -1,6 +1,15 @@
 import { basename } from 'node:path'
 import { ComfyClient, ComfyError, type ComfyOutputFile } from './comfy-client'
 import {
+  chooseModel,
+  detectFamily,
+  FAMILY_LABELS,
+  familyWorkflow,
+  findCompanions,
+  listComfyModels,
+  noModelMessage,
+} from './comfy-models'
+import {
   builtinImageWorkflow,
   dimensions,
   fillWorkflow,
@@ -10,7 +19,7 @@ import {
 
 export interface ComfyConfig {
   url: string
-  /** Checkpoint for the built-in workflow; empty = first installed. */
+  /** Model for the built-in workflow (checkpoint or diffusion model); empty = best available. */
   checkpoint: string
   /** Imported image workflow id; empty = built-in. */
   imageWorkflowId: string
@@ -81,18 +90,26 @@ export async function comfyGenerateImage(
         'img2img-Workflow mit {{input_image}} importieren (Einstellungen → Bildgenerierung).',
     )
   }
-  let checkpoint = config.checkpoint
-  if (!checkpoint) {
-    checkpoint = (await comfy.checkpoints())[0] ?? ''
-    if (!checkpoint) throw new ComfyError('In ComfyUI ist kein Checkpoint (Modell) installiert.')
+  const inventory = await comfy.inventory()
+  const model = chooseModel(listComfyModels(inventory), config.checkpoint)
+  if (model.kind === 'checkpoint') {
+    const files = await runWorkflow(
+      comfy,
+      builtinImageWorkflow(),
+      { ...values, checkpoint: model.name },
+      undefined,
+    )
+    return { files, workflowName: `ComfyUI (${model.name})` }
   }
-  const files = await runWorkflow(
-    comfy,
-    builtinImageWorkflow(),
-    { ...values, checkpoint },
-    undefined,
+  const family = detectFamily(model.name)
+  const companions = family ? findCompanions(family, inventory) : null
+  if (!family || !companions || 'missing' in companions) {
+    throw new ComfyError(noModelMessage([model]))
+  }
+  const files = await comfy.run(
+    familyWorkflow(family, { model: model.name, ...companions }, values),
   )
-  return { files, workflowName: `ComfyUI (${checkpoint})` }
+  return { files, workflowName: `ComfyUI ${FAMILY_LABELS[family]} (${model.name})` }
 }
 
 /** Generates a 3D model with an imported ComfyUI 3D workflow (e.g. Hunyuan3D → GLB). */

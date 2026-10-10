@@ -116,21 +116,42 @@ export class ComfyClient {
     return { version: data.data.system?.comfyui_version ?? 'unbekannt' }
   }
 
-  /** Lists installed checkpoints (for the built-in workflow). */
-  async checkpoints(): Promise<string[]> {
-    const response = await this.request('/object_info/CheckpointLoaderSimple')
+  /** Options of a loader node's file input, e.g. UNETLoader.unet_name ([] if unavailable). */
+  async nodeOptions(node: string, input: string): Promise<string[]> {
+    const response = await this.request(`/object_info/${encodeURIComponent(node)}`)
     if (!response.ok) return []
     const data = z
-      .looseObject({
-        CheckpointLoaderSimple: z.looseObject({
-          input: z.looseObject({
-            required: z.looseObject({ ckpt_name: z.array(z.unknown()) }),
-          }),
+      .record(
+        z.string(),
+        z.looseObject({
+          input: z.looseObject({ required: z.record(z.string(), z.unknown()).optional() }),
         }),
-      })
+      )
       .safeParse(await response.json().catch(() => undefined))
-    const options = data.success ? data.data.CheckpointLoaderSimple.input.required.ckpt_name[0] : []
+    const spec = data.success ? data.data[node]?.input.required?.[input] : undefined
+    const options: unknown = Array.isArray(spec) ? spec[0] : undefined
     return Array.isArray(options) ? options.filter((o): o is string => typeof o === 'string') : []
+  }
+
+  /** Lists installed checkpoints (for the built-in workflow). */
+  async checkpoints(): Promise<string[]> {
+    return this.nodeOptions('CheckpointLoaderSimple', 'ckpt_name')
+  }
+
+  /** All model files the built-in generator can use (checkpoints and split-file models). */
+  async inventory(): Promise<{
+    checkpoints: string[]
+    diffusionModels: string[]
+    textEncoders: string[]
+    vaes: string[]
+  }> {
+    const [checkpoints, diffusionModels, textEncoders, vaes] = await Promise.all([
+      this.checkpoints(),
+      this.nodeOptions('UNETLoader', 'unet_name'),
+      this.nodeOptions('CLIPLoader', 'clip_name'),
+      this.nodeOptions('VAELoader', 'vae_name'),
+    ])
+    return { checkpoints, diffusionModels, textEncoders, vaes }
   }
 
   /** Uploads an input image; returns the name to reference in a LoadImage node. */

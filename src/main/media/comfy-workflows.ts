@@ -78,6 +78,107 @@ export function fillWorkflow(workflow: ComfyWorkflow, values: PlaceholderValues)
   return fill(workflow) as ComfyWorkflow
 }
 
+type Link = [string, number]
+const isLink = (v: unknown): v is Link =>
+  Array.isArray(v) && typeof v[0] === 'string' && typeof v[1] === 'number'
+
+/** Text fields of prompt encoders (CLIPTextEncode, Flux, SDXL, Qwen edit …). */
+const TEXT_FIELDS = ['text', 'prompt', 't5xxl', 'clip_l', 'text_g', 'text_l']
+/** Nodes that pass conditioning through; their "conditioning" input is followed. */
+const CONDITIONING_INPUTS = ['conditioning', 'conditioning_to', 'positive']
+
+/**
+ * Follows a conditioning link back to the node that encodes text. Returns the node id and its
+ * string text fields, or null (e.g. ConditioningZeroOut has no text).
+ */
+function findTextEncoder(
+  workflow: ComfyWorkflow,
+  link: unknown,
+  depth = 0,
+): { id: string; fields: string[] } | null {
+  if (!isLink(link) || depth > 8) return null
+  const node = workflow[link[0]]
+  if (!node) return null
+  const fields = TEXT_FIELDS.filter((f) => typeof node.inputs[f] === 'string')
+  if (fields.length > 0) return { id: link[0], fields }
+  for (const key of CONDITIONING_INPUTS) {
+    const found = findTextEncoder(workflow, node.inputs[key], depth + 1)
+    if (found) return found
+  }
+  return null
+}
+
+/**
+ * Inserts {{prompt}}, {{negative}}, {{seed}}, {{width}}/{{height}} and {{input_image}} into a
+ * plain ComfyUI API export, so any working workflow can be imported without editing it.
+ * Returns the names of what was detected.
+ */
+export function autoPlaceholders(workflow: ComfyWorkflow): {
+  workflow: ComfyWorkflow
+  detected: string[]
+} {
+  const wf: ComfyWorkflow = JSON.parse(JSON.stringify(workflow)) as ComfyWorkflow
+  const detected = new Set<string>()
+  const setText = (target: { id: string; fields: string[] } | null, placeholder: string) => {
+    const node = target ? wf[target.id] : undefined
+    if (!target || !node) return false
+    for (const f of target.fields) node.inputs[f] = `{{${placeholder}}}`
+    detected.add(placeholder)
+    return true
+  }
+
+  let positive: { id: string; fields: string[] } | null = null
+  let negative: { id: string; fields: string[] } | null = null
+  for (const node of Object.values(wf)) {
+    const inputs = node.inputs
+    // KSampler, KSamplerAdvanced, CFGGuider: positive/negative inputs.
+    positive ??= findTextEncoder(wf, inputs['positive'])
+    negative ??= findTextEncoder(wf, inputs['negative'])
+    // BasicGuider (Flux): one conditioning input.
+    if (/Guider/.test(node.class_type)) positive ??= findTextEncoder(wf, inputs['conditioning'])
+  }
+  // Fallback: the first node with a text field.
+  if (!positive) {
+    const id = Object.keys(wf).find((key) =>
+      TEXT_FIELDS.some((f) => typeof wf[key]?.inputs[f] === 'string'),
+    )
+    const node = id ? wf[id] : undefined
+    if (id && node)
+      positive = { id, fields: TEXT_FIELDS.filter((f) => typeof node.inputs[f] === 'string') }
+  }
+  setText(positive, 'prompt')
+  if (negative && negative.id !== positive?.id) setText(negative, 'negative')
+
+  for (const node of Object.values(wf)) {
+    const inputs = node.inputs
+    for (const key of ['seed', 'noise_seed']) {
+      if (typeof inputs[key] === 'number') {
+        inputs[key] = '{{seed}}'
+        detected.add('seed')
+      }
+    }
+    const isLatent = /Empty.*Latent|Latent.*Empty/i.test(node.class_type)
+    if (
+      (isLatent || node.class_type === 'ModelSamplingFlux') &&
+      typeof inputs['width'] === 'number' &&
+      typeof inputs['height'] === 'number'
+    ) {
+      inputs['width'] = '{{width}}'
+      inputs['height'] = '{{height}}'
+      detected.add('width')
+      detected.add('height')
+    }
+  }
+  const loadImage = Object.values(wf).find(
+    (n) => n.class_type === 'LoadImage' && typeof n.inputs['image'] === 'string',
+  )
+  if (loadImage) {
+    loadImage.inputs['image'] = '{{input_image}}'
+    detected.add('input_image')
+  }
+  return { workflow: wf, detected: [...detected].sort() }
+}
+
 /** Width/height for an aspect ratio like "16:9", rounded to multiples of 64. */
 export function dimensions(
   aspectRatio: string | undefined,
@@ -139,25 +240,36 @@ export class ComfyWorkflowStore {
   }
 
   import(name: string, kind: ComfyWorkflowKind, json: string): ComfyWorkflowInfo {
-    const workflow = parseWorkflowJson(json)
-    const placeholders = findPlaceholders(workflow)
+    let workflow = parseWorkflowJson(json)
+    let placeholders = findPlaceholders(workflow)
+    // A plain export without placeholders: detect prompt, seed, size and input image.
+    let autoDetected = false
+    if (placeholders.length === 0) {
+      const auto = autoPlaceholders(workflow)
+      workflow = auto.workflow
+      placeholders = findPlaceholders(workflow)
+      autoDetected = auto.detected.length > 0
+    }
     if (
       kind === '3d' &&
       !placeholders.includes('prompt') &&
       !placeholders.includes('input_image')
     ) {
       throw new ComfyError(
-        'Der 3D-Workflow braucht {{prompt}} oder {{input_image}} als Platzhalter in einem Eingabefeld.',
+        'Im 3D-Workflow wurde weder ein Prompt- noch ein Bild-Eingang (LoadImage) gefunden. Bitte {{prompt}} oder {{input_image}} in ein Eingabefeld schreiben.',
       )
     }
     if (kind === 'image' && !placeholders.includes('prompt')) {
-      throw new ComfyError('Der Bild-Workflow braucht {{prompt}} als Platzhalter im Prompt-Feld.')
+      throw new ComfyError(
+        'Im Bild-Workflow wurde kein Prompt-Feld gefunden (z. B. CLIPTextEncode). Bitte {{prompt}} in das Prompt-Feld schreiben.',
+      )
     }
     const info: ComfyWorkflowInfo = {
       id: randomUUID(),
       name: name.trim() || 'Workflow',
       kind,
       placeholders,
+      autoDetected,
       createdAt: Date.now(),
     }
     mkdirSync(this.dir, { recursive: true })

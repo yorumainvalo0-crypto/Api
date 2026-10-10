@@ -4,3 +4,4 @@ release
 node_modules
 package-lock.json
 tests/fixtures
+.claude

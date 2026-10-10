@@ -61,6 +61,7 @@ export function ImageGenerationSection(props: {
   }
 
   const imageWorkflows = workflows.filter((w) => w.kind === 'image')
+  const models = status?.models ?? []
   const isComfy = settings.imageBackend === 'comfyui'
 
   return (
@@ -98,8 +99,9 @@ export function ImageGenerationSection(props: {
       ) : (
         <div className="space-y-3 rounded-lg border border-zinc-200 p-3 dark:border-zinc-800">
           <p className="text-xs text-zinc-500">
-            ComfyUI muss auf diesem PC laufen (Standard: Port 8188). Bilder entstehen lokal auf
-            deiner Grafikkarte – ohne Kosten.
+            ComfyUI muss auf diesem PC laufen (Desktop-App: Port 8000, Portable/Pinokio: meist
+            8188). Bilder entstehen lokal auf deiner Grafikkarte – ohne Kosten. Erkannt werden
+            Checkpoints und Einzeldatei-Modelle (Z-Image Turbo, Flux.1 dev/schnell, Qwen-Image).
           </p>
           <label className="block space-y-1 text-sm">
             <span className="text-zinc-500">ComfyUI-Adresse</span>
@@ -123,6 +125,21 @@ export function ImageGenerationSection(props: {
               </span>
             )}
           </div>
+          {status && status.suggestions.length > 0 && (
+            <div className="flex flex-wrap items-center gap-2 text-sm">
+              <span className="text-zinc-500">ComfyUI gefunden unter:</span>
+              {status.suggestions.map((url) => (
+                <button
+                  key={url}
+                  type="button"
+                  onClick={() => void update({ comfyUrl: url }).then(() => test())}
+                  className={button}
+                >
+                  {url} verwenden
+                </button>
+              ))}
+            </div>
+          )}
 
           <label className="block space-y-1 text-sm">
             <span className="text-zinc-500">Bild-Workflow</span>
@@ -131,7 +148,7 @@ export function ImageGenerationSection(props: {
               onChange={(e) => void update({ comfyImageWorkflow: e.target.value })}
               className={`${input} w-full`}
             >
-              <option value="">Eingebaut: Text → Bild (Checkpoint unten)</option>
+              <option value="">Eingebaut: Text → Bild (Modell unten)</option>
               {imageWorkflows.map((w) => (
                 <option key={w.id} value={w.id}>
                   {w.name}
@@ -143,20 +160,46 @@ export function ImageGenerationSection(props: {
           {!settings.comfyImageWorkflow && (
             <div className="grid grid-cols-2 gap-3 text-sm">
               <label className="space-y-1">
-                <span className="text-zinc-500">Checkpoint</span>
+                <span className="text-zinc-500">Modell</span>
                 <select
                   value={settings.comfyCheckpoint}
                   onChange={(e) => void update({ comfyCheckpoint: e.target.value })}
                   className={`${input} w-full`}
                 >
-                  <option value="">Erstes verfügbares</option>
-                  {(status?.checkpoints ?? []).map((c) => (
-                    <option key={c} value={c}>
-                      {c}
-                    </option>
-                  ))}
+                  <option value="">Bestes verfügbares</option>
+                  {models.some((m) => m.kind === 'checkpoint') && (
+                    <optgroup label="Checkpoints">
+                      {models
+                        .filter((m) => m.kind === 'checkpoint')
+                        .map((m) => (
+                          <option key={m.name} value={m.name}>
+                            {m.name}
+                          </option>
+                        ))}
+                    </optgroup>
+                  )}
+                  {models.some((m) => m.kind === 'diffusion') && (
+                    <optgroup label="Einzeldatei-Modelle (diffusion_models)">
+                      {models
+                        .filter((m) => m.kind === 'diffusion')
+                        .map((m) => (
+                          <option
+                            key={m.name}
+                            value={m.name}
+                            disabled={m.family === null || m.missing.length > 0}
+                          >
+                            {m.name} –{' '}
+                            {m.family === null
+                              ? 'Typ unbekannt, Workflow importieren'
+                              : m.missing.length > 0
+                                ? `${m.familyLabel}: fehlt ${m.missing.join(', ')}`
+                                : m.familyLabel}
+                          </option>
+                        ))}
+                    </optgroup>
+                  )}
                   {settings.comfyCheckpoint &&
-                    !(status?.checkpoints ?? []).includes(settings.comfyCheckpoint) && (
+                    !models.some((m) => m.name === settings.comfyCheckpoint) && (
                       <option value={settings.comfyCheckpoint}>{settings.comfyCheckpoint}</option>
                     )}
                 </select>
@@ -190,10 +233,13 @@ export function ImageGenerationSection(props: {
           </button>
         </div>
         <p className="text-xs text-zinc-500">
-          In ComfyUI „Workflow → Export (API)“ speichern. Im Prompt-Feld <code>{'{{prompt}}'}</code>{' '}
-          eintragen, optional <code>{'{{input_image}}'}</code> (LoadImage),{' '}
-          <code>{'{{seed}}'}</code>, <code>{'{{negative}}'}</code>. 3D-Workflows (z. B. Hunyuan3D
-          mit „Save GLB“) stehen dem Agenten als Werkzeug „generate_3d_model“ zur Verfügung.
+          Einen funktionierenden Workflow in ComfyUI über „Workflow → Export (API)“ speichern und
+          hier importieren – damit läuft jedes Modell. Prompt, Negativ-Prompt, Seed, Bildgröße und
+          Eingabebild (LoadImage) werden automatisch erkannt. Wer es genau steuern will, trägt
+          vorher selbst <code>{'{{prompt}}'}</code>, <code>{'{{negative}}'}</code>,{' '}
+          <code>{'{{seed}}'}</code>, <code>{'{{width}}'}</code>/<code>{'{{height}}'}</code> oder{' '}
+          <code>{'{{input_image}}'}</code> ein. 3D-Workflows (z. B. Hunyuan3D mit „Save GLB“) stehen
+          dem Agenten als Werkzeug „generate_3d_model“ zur Verfügung.
         </p>
         {workflows.length === 0 ? (
           <p className="text-xs text-zinc-400">Noch keine Workflows importiert.</p>
@@ -204,6 +250,7 @@ export function ImageGenerationSection(props: {
                 {w.kind === '3d' ? <Box size={14} /> : <ImageIcon size={14} />}
                 <span className="font-medium">{w.name}</span>
                 <span className="truncate text-xs text-zinc-500">
+                  {w.autoDetected ? 'automatisch erkannt: ' : ''}
                   {w.placeholders.map((p) => `{{${p}}}`).join(' ')}
                 </span>
                 <button
