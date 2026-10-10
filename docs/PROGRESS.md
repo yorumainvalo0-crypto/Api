@@ -43,9 +43,10 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
   keine neuere Version veröffentlicht“. Ohne Internet heißt es „keine Internetverbindung“.
 - **Releases werden direkt veröffentlicht.** Vorher wären sie als Entwurf angelegt worden,
   den die App nicht sieht.
-- **Version 0.2.0:** Der Tag `v0.2.0` startet den Release-Workflow. Er baut den Installer und
-  veröffentlicht ihn unter GitHub → Releases. Deine installierte 0.1.0 findet das Update dann
-  selbst.
+- **Version 0.2.0:** Releases entstehen jetzt automatisch, sobald auf `main` eine neue
+  Versionsnummer ankommt. Einen Tag zu pushen ist nicht mehr nötig, denn das blockiert die
+  Cloud-Umgebung. Der Workflow testet auf Windows, baut den Installer und veröffentlicht ihn
+  unter GitHub → Releases. Deine installierte 0.1.0 findet das Update dann selbst.
 - Getestet: 2 neue Tests, gesamt 263 Tests, Smoke-Test OK.
 
 ### 2026-10-10 17:03 – Jev (TypeSafe) als Werkzeug für jedes Modell ✅

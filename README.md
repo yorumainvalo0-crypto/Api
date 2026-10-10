@@ -28,9 +28,10 @@ Der Agent-Kern ist das **Claude Agent SDK** (derselbe Kern wie Claude Code).
 herunterladen und `AI Workbench Setup <version>.exe` ausführen. (Ohne Code-Signatur zeigt
 Windows SmartScreen eine Warnung → „Weitere Informationen“ → „Trotzdem ausführen“.)
 
-**Releases & Auto-Update:** Version in `package.json` erhöhen, Tag pushen
-(`git tag v0.2.0 && git push --tags`). GitHub baut den Installer und veröffentlicht ihn als
-Release; die installierte App aktualisiert sich daraus automatisch (Einstellungen → Updates).
+**Releases & Auto-Update:** Version in `package.json` erhöhen und nach `main` pushen. GitHub
+baut den Installer und veröffentlicht ihn als Release `v<version>`. Die installierte App
+aktualisiert sich daraus automatisch (Einstellungen → Updates). Neueste Version zum
+Herunterladen: GitHub → _Releases_.
 Bei einem privaten Repository funktioniert das automatische Update nicht – dann den Installer
 manuell aus dem Release laden.
 
