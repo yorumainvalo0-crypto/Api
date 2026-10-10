@@ -144,6 +144,9 @@ export function runSmokeTest(win: BrowserWindow): void {
         void checkChromiumLoader(mockUrl)
           .then((ok) => {
             if (!ok) throw new Error('hidden Chromium loader did not render JavaScript content')
+            return checkPopoverDismiss(win)
+          })
+          .then(() => {
             return captureScreenshot(win)
           })
           .then(() => {
@@ -154,6 +157,27 @@ export function runSmokeTest(win: BrowserWindow): void {
       })
       .catch((error: unknown) => fail(String(error)))
   })
+}
+
+/** Opens the model picker and verifies a real mouse click outside closes it again. */
+async function checkPopoverDismiss(win: BrowserWindow): Promise<void> {
+  const searchOpen = `Boolean(document.querySelector('input[placeholder^="Suchen oder Modell-ID"]'))`
+  const opened = (await win.webContents.executeJavaScript(`(async () => {
+    document.querySelector('main header button')?.click()
+    await new Promise((r) => setTimeout(r, 200))
+    return ${searchOpen}
+  })()`)) as boolean
+  if (!opened) throw new Error('model picker did not open')
+  const [width = 800, height = 600] = win.getContentSize()
+  const point = { x: Math.round(width * 0.75), y: Math.round(height * 0.8) }
+  win.webContents.sendInputEvent({ type: 'mouseDown', button: 'left', clickCount: 1, ...point })
+  win.webContents.sendInputEvent({ type: 'mouseUp', button: 'left', clickCount: 1, ...point })
+  const stillOpen = (await win.webContents.executeJavaScript(`(async () => {
+    await new Promise((r) => setTimeout(r, 200))
+    return ${searchOpen}
+  })()`)) as boolean
+  if (stillOpen) throw new Error('model picker did not close on an outside click')
+  console.log('[smoke] popover closes on outside click')
 }
 
 /** Optionally saves a screenshot of the opened smoke chat (AIW_SMOKE_SCREENSHOT=<file.png>). */

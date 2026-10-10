@@ -3,7 +3,7 @@
 Laufendes Protokoll zur Umsetzung von [`PLAN.md`](./PLAN.md).
 Zeiten in UTC. Legende: ✅ fertig · 🔄 in Arbeit · ⏳ offen · ⚠️ Problem/Hinweis
 
-**Letztes Update:** 2026-10-10 13:51
+**Letztes Update:** 2026-10-10 16:56
 
 ## Gesamtstatus
 
@@ -34,6 +34,14 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
 | Windows-CI: Tests, Installer, Smoke-Test der installierten App               | ✅       |
 
 ## Protokoll
+
+### 2026-10-10 16:56 – Menüs schließen beim Klick daneben ✅
+
+- **Behoben:** Die Modellauswahl ließ sich nur über den Knopf wieder schließen. Jetzt
+  schließt sie sich bei einem Klick daneben, mit Esc und wenn das Fenster den Fokus verliert.
+  Die Kontext-Anzeige verhält sich genauso.
+- **Getestet:** Der Smoke-Test öffnet die Modellauswahl und klickt mit einer echten Maus
+  daneben. Ohne die Korrektur schlägt er fehl, mit ihr läuft er durch. 254 Tests grün.
 
 ### 2026-10-10 13:51 – Dunkelmodus, Verbrauchs-Statistik und Kontext-Anzeige ✅
 

@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ContextUsage } from '@shared/schemas/usage'
 import { api } from '../../lib/api'
+import { useDismiss } from '../../lib/use-dismiss'
 import { formatTokens } from './format'
 
 function level(percentage: number): { bar: string; text: string } {
@@ -37,14 +38,11 @@ export function ContextMeter(props: { chatId: string }) {
     }
   }, [chatId])
 
-  useEffect(() => {
-    if (!open) return
-    const onDown = (e: MouseEvent) => {
-      if (!ref.current?.contains(e.target as Node)) setOpen(false)
-    }
-    window.addEventListener('mousedown', onDown)
-    return () => window.removeEventListener('mousedown', onDown)
-  }, [open])
+  useDismiss(
+    ref,
+    open,
+    useCallback(() => setOpen(false), []),
+  )
 
   if (!context) return null
   const pct = Math.max(0, context.percentage)

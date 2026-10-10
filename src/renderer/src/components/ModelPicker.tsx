@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { ChevronDown, RefreshCw } from 'lucide-react'
 import type { ModelInfo } from '@shared/schemas/models'
 import type { ProviderId } from '@shared/schemas/settings'
 import { api } from '../lib/api'
+import { useDismiss } from '../lib/use-dismiss'
 
 /** Searchable model list loaded live from the provider; free text is allowed as a fallback. */
 export function ModelPicker(props: {
@@ -57,9 +58,15 @@ export function ModelPicker(props: {
   }, [models, filter, props.filter])
 
   const current = models.find((m) => m.id === value)
+  const rootRef = useRef<HTMLDivElement>(null)
+  useDismiss(
+    rootRef,
+    open,
+    useCallback(() => setOpen(false), []),
+  )
 
   return (
-    <div className="relative">
+    <div ref={rootRef} className="relative">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
