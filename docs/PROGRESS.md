@@ -58,6 +58,7 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
     Jede wird genau einmal gezählt, und der Kontext wird gemeldet.
   - Die Korrektur alter Datenbanken ist ebenfalls getestet.
   - Gesamt: 254 Tests, Smoke-Test OK, Screenshots im Dunkelmodus geprüft.
+- **Windows-CI grün** (Tests, Installer, Smoke-Test der installierten App) → nach `main` gepusht.
 
 ### 2026-10-10 13:35 – Handschrift-Erkennung, Pinokio und Office-Dateien ✅
 
