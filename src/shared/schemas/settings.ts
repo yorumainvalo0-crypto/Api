@@ -11,6 +11,19 @@ export type SecretId = z.infer<typeof SecretIdSchema>
 export const JevSourceSchema = z.enum(['typesafe', 'openrouter'])
 export type JevSource = z.infer<typeof JevSourceSchema>
 
+/** Reasoning effort for Claude models; "default" lets the model decide (nothing is sent). */
+export const EffortSchema = z.enum(['default', 'low', 'medium', 'high', 'xhigh', 'max'])
+export type Effort = z.infer<typeof EffortSchema>
+
+export const EFFORT_LABELS: Record<Effort, string> = {
+  default: 'Standard',
+  low: 'Niedrig',
+  medium: 'Mittel',
+  high: 'Hoch',
+  xhigh: 'Sehr hoch',
+  max: 'Maximum',
+}
+
 export const PROVIDER_LABELS: Record<ProviderId, string> = {
   anthropic: 'Anthropic',
   openrouter: 'OpenRouter',
@@ -53,6 +66,8 @@ export const SettingsSchema = z.object({
   ocrBaseUrl: z.string().default(''),
   /** Seconds the OCR model stays on the GPU after use (0 = unload immediately). */
   ocrKeepAliveSec: z.number().int().min(0).max(3600).default(60),
+  /** How hard Claude thinks: higher is more thorough, slower and more expensive. */
+  effort: EffortSchema.default('default'),
   /** Offer the Jev decision model (TypeSafe) as a tool to every chat model when a key exists. */
   jevEnabled: z.boolean().default(true),
   jevSource: JevSourceSchema.default('typesafe'),
@@ -90,6 +105,7 @@ export const SettingsPatchSchema = z
     ocrModel: z.string().min(1),
     ocrBaseUrl: z.union([z.literal(''), z.url()]),
     ocrKeepAliveSec: z.number().int().min(0).max(3600),
+    effort: EffortSchema,
     jevEnabled: z.boolean(),
     jevSource: JevSourceSchema,
     jevModel: z.string().max(200),

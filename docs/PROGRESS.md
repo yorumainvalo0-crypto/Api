@@ -3,7 +3,7 @@
 Laufendes Protokoll zur Umsetzung von [`PLAN.md`](./PLAN.md).
 Zeiten in UTC. Legende: ✅ fertig · 🔄 in Arbeit · ⏳ offen · ⚠️ Problem/Hinweis
 
-**Letztes Update:** 2026-10-10 17:40
+**Letztes Update:** 2026-10-10 18:08
 
 ## Gesamtstatus
 
@@ -26,7 +26,7 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
 | Prüfung                                                                      | Ergebnis |
 | ---------------------------------------------------------------------------- | -------- |
 | TypeScript strict + ESLint                                                   | ✅       |
-| Unit- und Integrationstests (34 Dateien)                                     | ✅ 265   |
+| Unit- und Integrationstests (35 Dateien)                                     | ✅ 267   |
 | Integration mit echtem Runtime (Chat, Coding, Web, Medien, Add-ons, ComfyUI) | ✅       |
 | Integration: Handschrift-OCR (Ollama) und Office lesen/erstellen             | ✅       |
 | Live-Test echte Websuche (optional, `AIW_LIVE_WEB=1`)                        | ✅       |
@@ -34,6 +34,18 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
 | Windows-CI: Tests, Installer, Smoke-Test der installierten App               | ✅       |
 
 ## Protokoll
+
+### 2026-10-10 18:08 – v0.2.2: Effort im Chat einstellbar ✅
+
+- **Neue Auswahl „Effort“** in der Chat-Kopfzeile neben dem Modell. Stufen: Standard,
+  Niedrig, Mittel, Hoch, Sehr hoch, Maximum.
+  - Höher heißt gründlicheres Nachdenken, aber langsamer und teurer.
+  - „Standard“ überlässt es dem Modell.
+- **So kommt es an:** Die Einstellung geht an die Claude-Laufzeit, die sie als
+  `output_config.effort` an die API schickt. Das habe ich an einer echten Anfrage mit
+  Opus 5.5 geprüft. Modelle ohne Effort-Unterstützung (z. B. Sonnet 4.5) gleicht die
+  Laufzeit selbst ab. Bei Ollama ist die Auswahl gesperrt.
+- **Getestet:** 2 neue Tests, gesamt 267 Tests, Smoke-Test OK, Screenshot geprüft.
 
 ### 2026-10-10 17:40 – v0.2.1: Update-Anzeige live mit Fortschritt ✅
 

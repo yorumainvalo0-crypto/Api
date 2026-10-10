@@ -14,7 +14,13 @@ import {
   Square,
   X,
 } from 'lucide-react'
-import { PROVIDER_LABELS, type Settings } from '@shared/schemas/settings'
+import {
+  EFFORT_LABELS,
+  EffortSchema,
+  PROVIDER_LABELS,
+  type Effort,
+  type Settings,
+} from '@shared/schemas/settings'
 import {
   AgentPermissionModeSchema,
   PERMISSION_MODE_LABELS,
@@ -177,6 +183,9 @@ export function ChatView(props: {
       await api.invoke('settings:update', { models: { ...settings.models, [provider]: model } }),
     )
 
+  const setEffort = async (effort: Effort) =>
+    props.onSettingsChange(await api.invoke('settings:update', { effort }))
+
   const setPermissionMode = async (mode: AgentPermissionMode) => {
     await api.invoke('chats:set-permission-mode', { chatId, mode })
     setChat((c) => (c ? { ...c, permissionMode: mode } : c))
@@ -220,6 +229,24 @@ export function ChatView(props: {
             onChange={(m) => void setModel(m)}
             compact
           />
+          <select
+            value={provider === 'ollama' ? 'default' : settings.effort}
+            disabled={provider === 'ollama' || running}
+            title={
+              provider === 'ollama'
+                ? 'Effort gibt es nur bei Claude-Modellen (Anthropic, OpenRouter).'
+                : 'Effort: Wie gründlich das Modell nachdenkt. Höher = genauer, aber langsamer und teurer. Modelle ohne Effort-Unterstützung ignorieren die Einstellung.'
+            }
+            aria-label="Effort"
+            onChange={(e) => void setEffort(EffortSchema.parse(e.target.value))}
+            className="rounded-md border border-zinc-300 bg-transparent px-2 py-1 text-sm disabled:opacity-50 dark:border-zinc-700"
+          >
+            {EffortSchema.options.map((level) => (
+              <option key={level} value={level}>
+                Effort: {EFFORT_LABELS[level]}
+              </option>
+            ))}
+          </select>
           {isCode && chat && (
             <>
               <span

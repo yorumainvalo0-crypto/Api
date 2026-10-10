@@ -136,6 +136,14 @@ const JEV_HINT_CODE =
   'and returns calibrated probabilities. Use it for classification, scoring and checks, or when ' +
   'the user asks for Jev; it cannot generate text.'
 
+/** The SDK effort option; local Ollama models do not understand the effort parameter. */
+export function effortOption(
+  settings: Pick<Settings, 'effort'>,
+  provider: ProviderId,
+): { effort?: Exclude<Settings['effort'], 'default'> } {
+  return settings.effort !== 'default' && provider !== 'ollama' ? { effort: settings.effort } : {}
+}
+
 export function chatWorkspace(dataDir: string, chatId: string): string {
   return join(dataDir, 'chats', chatId)
 }
@@ -378,6 +386,7 @@ export class SessionManager {
         plugins: addons.plugins,
         allowedTools: autoAllowed,
         ...(settings.maxBudgetUsd > 0 ? { maxBudgetUsd: settings.maxBudgetUsd } : {}),
+        ...effortOption(settings, provider),
         // Tools from user-installed MCP servers and plugins ask for approval.
         canUseTool: this.permissions.canUseTool(chatId),
         // Our own free web tools replace the built-in ones (which need Anthropic-hosted services).
