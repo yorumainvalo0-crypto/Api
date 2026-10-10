@@ -3,7 +3,7 @@
 Laufendes Protokoll zur Umsetzung von [`PLAN.md`](./PLAN.md).
 Zeiten in UTC. Legende: ✅ fertig · 🔄 in Arbeit · ⏳ offen · ⚠️ Problem/Hinweis
 
-**Letztes Update:** 2026-10-10 17:32
+**Letztes Update:** 2026-10-10 17:40
 
 ## Gesamtstatus
 
@@ -26,7 +26,7 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
 | Prüfung                                                                      | Ergebnis |
 | ---------------------------------------------------------------------------- | -------- |
 | TypeScript strict + ESLint                                                   | ✅       |
-| Unit- und Integrationstests (34 Dateien)                                     | ✅ 263   |
+| Unit- und Integrationstests (34 Dateien)                                     | ✅ 265   |
 | Integration mit echtem Runtime (Chat, Coding, Web, Medien, Add-ons, ComfyUI) | ✅       |
 | Integration: Handschrift-OCR (Ollama) und Office lesen/erstellen             | ✅       |
 | Live-Test echte Websuche (optional, `AIW_LIVE_WEB=1`)                        | ✅       |
@@ -34,6 +34,22 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
 | Windows-CI: Tests, Installer, Smoke-Test der installierten App               | ✅       |
 
 ## Protokoll
+
+### 2026-10-10 17:40 – v0.2.1: Update-Anzeige live mit Fortschritt ✅
+
+- **Problem:** Nach „Nach Updates suchen“ stand dauerhaft „wird heruntergeladen …“. Die
+  Einstellungen haben den Stand nur einmal abgefragt und nie aktualisiert. Ob der Download
+  lief, fertig war oder fehlschlug, war nicht zu sehen.
+- **Jetzt:**
+  - Die App meldet jede Änderung live: Fortschrittsbalken mit Prozent, MB und Geschwindigkeit,
+    Fehler in Klartext, „bereit“.
+  - Ein Hinweis unten rechts erscheint überall in der App, mit „Jetzt neu starten“ für eine
+    stille Installation und anschließendem Neustart.
+  - Erneutes Suchen bricht einen laufenden Download nicht mehr ab.
+- **Getestet:** 4 Tests mit nachgebautem Updater (Fortschritt, fertig, Fehler, Installation),
+  gesamt 265 Tests, Smoke-Test OK.
+- ⚠️ **Einmalig:** Die installierte 0.1.0 hat noch die alte Anzeige. Am einfachsten installierst
+  du 0.2.1 einmal von Hand von der Releases-Seite. Ab dann laufen Updates sichtbar.
 
 ### 2026-10-10 17:12 – Updates: erstes Release v0.2.0 ✅
 

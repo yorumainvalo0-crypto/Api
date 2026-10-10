@@ -18,6 +18,7 @@ import { ConnectionTestResultSchema, ModelInfoSchema } from './schemas/models'
 import { projectContract, projectEvents } from './ipc-project'
 import { addonsContract } from './ipc-addons'
 import { OutputFileSchema } from './schemas/media'
+import { UpdateStatusSchema } from './schemas/updates'
 import { ContextUsageSchema, UsageRangeSchema, UsageSummarySchema } from './schemas/usage'
 import {
   ComfyStatusSchema,
@@ -42,13 +43,9 @@ export const ipcContract = {
     }),
   },
   'settings:get': { input: z.void(), output: SettingsSchema },
-  'updates:check': {
-    input: z.void(),
-    output: z.object({
-      state: z.enum(['disabled', 'checking', 'available', 'not-available', 'downloaded', 'error']),
-      message: z.string(),
-    }),
-  },
+  'updates:check': { input: z.void(), output: UpdateStatusSchema },
+  /** Current updater state without starting a new check. */
+  'updates:status': { input: z.void(), output: UpdateStatusSchema },
   'updates:install': { input: z.void(), output: z.object({ ok: z.boolean() }) },
   /** Tests the ComfyUI connection (current settings) and lists installed checkpoints. */
   'comfy:status': { input: z.void(), output: ComfyStatusSchema },
@@ -190,6 +187,8 @@ export type IpcOutput<C extends IpcChannel> = z.infer<IpcContract[C]['output']>
 /** Main -> renderer push events. */
 export const ipcEvents = {
   'agent:event': AgentEventSchema,
+  /** Every updater change: checking, download progress, ready to install, errors. */
+  'updates:changed': UpdateStatusSchema,
   'ocr:progress': z.object({
     status: z.string(),
     completed: z.number(),

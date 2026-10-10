@@ -29,7 +29,7 @@ import { storeAttachment } from './workspace/attachments'
 import { handleFileProtocol, registerFileProtocolScheme } from './workspace/file-protocol'
 import { runSmokeTest } from './smoke'
 import { extractDocument } from './documents/extract'
-import { checkForUpdates, initUpdater, installUpdateNow } from './updater'
+import { checkForUpdates, initUpdater, installUpdateNow, updateStatus } from './updater'
 import { createChromiumLoader, createSmartLoader } from './web/electron-loader'
 import { createWebMcpServer } from './web/mcp-server'
 import { createFetchLoader, WebClient } from './web/web-client'
@@ -159,6 +159,7 @@ function bootstrap(): void {
     }),
     'settings:get': () => settings.get(),
     'updates:check': () => checkForUpdates(),
+    'updates:status': () => updateStatus(),
     'local:discover': () => discoverLocalServices(),
     'ocr:status': async () => {
       const { ocrModel, ocrBaseUrl, ollamaBaseUrl } = settings.get()
@@ -254,10 +255,7 @@ function bootstrap(): void {
       if (settings.get().comfyImageWorkflow === id) settings.update({ comfyImageWorkflow: '' })
       return { ok: true }
     },
-    'updates:install': () => {
-      installUpdateNow()
-      return { ok: true }
-    },
+    'updates:install': () => ({ ok: installUpdateNow() }),
     'settings:update': (patch) => settings.update(patch),
     'secrets:status': () => secrets.status(),
     'jev:test': async () => {
@@ -412,7 +410,10 @@ function bootstrap(): void {
 
   mainWindow = createWindow()
   if (isSmokeTest) runSmokeTest(mainWindow)
-  else initUpdater()
+  else
+    initUpdater((status) => {
+      if (mainWindow) sendEvent(mainWindow.webContents, 'updates:changed', status)
+    })
 }
 
 void app.whenReady().then(() => {

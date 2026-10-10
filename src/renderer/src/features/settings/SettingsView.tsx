@@ -6,8 +6,8 @@ import {
   type SecretStatus,
   type Settings,
 } from '@shared/schemas/settings'
-import type { IpcOutput } from '@shared/ipc'
 import { api } from '../../lib/api'
+import { useUpdateStatus } from '../../lib/use-update-status'
 import { ModelPicker, cleanError } from '../../components/ModelPicker'
 import { ImageGenerationSection } from './ImageGenerationSection'
 import { LocalServicesSection } from './LocalServicesSection'
@@ -298,31 +298,34 @@ function BackupButton() {
 }
 
 function UpdatesSection() {
-  const [status, setStatus] = useState<IpcOutput<'updates:check'> | null>(null)
+  const live = useUpdateStatus()
+  const [checkError, setCheckError] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
   const check = async () => {
     setChecking(true)
+    setCheckError(null)
     try {
-      setStatus(await api.invoke('updates:check'))
+      await api.invoke('updates:check')
     } catch (e) {
-      setStatus({ state: 'error', message: cleanError(e) })
+      setCheckError(cleanError(e))
     } finally {
       setChecking(false)
     }
   }
+  const busy = live?.state === 'checking' || live?.state === 'downloading'
   return (
     <section className="space-y-2">
       <h2 className="font-medium">Updates</h2>
       <div className="flex flex-wrap items-center gap-3 text-sm">
         <button
           type="button"
-          disabled={checking}
+          disabled={checking || busy}
           onClick={() => void check()}
           className="rounded-md border border-zinc-300 px-3 py-1 disabled:opacity-50 dark:border-zinc-700"
         >
           {checking ? 'Prüfe …' : 'Nach Updates suchen'}
         </button>
-        {status?.state === 'downloaded' && (
+        {live?.state === 'downloaded' && (
           <button
             type="button"
             onClick={() => void api.invoke('updates:install')}
@@ -331,12 +334,22 @@ function UpdatesSection() {
             Jetzt neu starten und installieren
           </button>
         )}
-        {status && (
-          <span className={status.state === 'error' ? 'text-red-600' : 'text-zinc-500'}>
-            {status.message}
+        {(checkError ?? live?.message) && (
+          <span
+            className={checkError || live?.state === 'error' ? 'text-red-600' : 'text-zinc-500'}
+          >
+            {checkError ?? live?.message}
           </span>
         )}
       </div>
+      {live?.percent !== null && live?.percent !== undefined && live.state !== 'downloaded' && (
+        <div className="h-2 max-w-md overflow-hidden rounded-full bg-zinc-200 dark:bg-zinc-700">
+          <div
+            className="h-full bg-blue-600 transition-all"
+            style={{ width: `${live.percent}%` }}
+          />
+        </div>
+      )}
     </section>
   )
 }

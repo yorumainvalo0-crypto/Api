@@ -8,6 +8,7 @@ import { ChatSidebar } from './features/chat/ChatSidebar'
 import { SettingsView } from './features/settings/SettingsView'
 import { AddonsView } from './features/addons/AddonsView'
 import { UsageView } from './features/usage/UsageView'
+import { UpdateToast } from './components/UpdateToast'
 
 type View = 'chat' | 'addons' | 'usage' | 'settings'
 
@@ -143,6 +144,7 @@ export function App() {
           <SettingsView settings={settings} onChange={setSettings} />
         )}
       </main>
+      <UpdateToast onOpenSettings={() => setView('settings')} />
     </div>
   )
 }
