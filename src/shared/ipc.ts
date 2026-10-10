@@ -17,6 +17,7 @@ import { ConnectionTestResultSchema, ModelInfoSchema } from './schemas/models'
 import { projectContract, projectEvents } from './ipc-project'
 import { addonsContract } from './ipc-addons'
 import { OutputFileSchema } from './schemas/media'
+import { ContextUsageSchema, UsageRangeSchema, UsageSummarySchema } from './schemas/usage'
 import {
   ComfyStatusSchema,
   ComfyWorkflowInfoSchema,
@@ -106,6 +107,11 @@ export const ipcContract = {
     output: ConnectionTestResultSchema,
   },
   'chats:list': { input: z.void(), output: z.array(ChatSummarySchema) },
+  'usage:context': { input: ChatIdInput, output: ContextUsageSchema.nullable() },
+  'usage:summary': {
+    input: z.object({ range: UsageRangeSchema }),
+    output: UsageSummarySchema,
+  },
   'chats:get': { input: ChatIdInput, output: ChatDetailSchema.nullable() },
   'chats:rename': {
     input: ChatIdInput.extend({ title: z.string().trim().min(1).max(200) }),

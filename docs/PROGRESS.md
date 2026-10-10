@@ -3,7 +3,7 @@
 Laufendes Protokoll zur Umsetzung von [`PLAN.md`](./PLAN.md).
 Zeiten in UTC. Legende: ✅ fertig · 🔄 in Arbeit · ⏳ offen · ⚠️ Problem/Hinweis
 
-**Letztes Update:** 2026-10-10 13:45
+**Letztes Update:** 2026-10-10 13:51
 
 ## Gesamtstatus
 
@@ -26,7 +26,7 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
 | Prüfung                                                                      | Ergebnis |
 | ---------------------------------------------------------------------------- | -------- |
 | TypeScript strict + ESLint                                                   | ✅       |
-| Unit- und Integrationstests (29 Dateien)                                     | ✅ 243   |
+| Unit- und Integrationstests (31 Dateien)                                     | ✅ 254   |
 | Integration mit echtem Runtime (Chat, Coding, Web, Medien, Add-ons, ComfyUI) | ✅       |
 | Integration: Handschrift-OCR (Ollama) und Office lesen/erstellen             | ✅       |
 | Live-Test echte Websuche (optional, `AIW_LIVE_WEB=1`)                        | ✅       |
@@ -34,6 +34,30 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
 | Windows-CI: Tests, Installer, Smoke-Test der installierten App               | ✅       |
 
 ## Protokoll
+
+### 2026-10-10 13:51 – Dunkelmodus, Verbrauchs-Statistik und Kontext-Anzeige ✅
+
+- **Dunkelmodus ist Standard.** Das gilt auch für deine bestehende Installation, wenn dort
+  noch „System“ eingestellt war. Neu ist ein Sonne/Mond-Knopf unten links zum Umschalten.
+- **Neue Ansicht „Verbrauch“** (Diagramm-Symbol links):
+  - Zeiträume: Heute, 7 Tage, 30 Tage, Dieser Monat, Gesamt
+  - Summen für Kosten, Anfragen, Eingabe- und Ausgabe-Tokens sowie Cache
+  - Verlauf als Balkendiagramm, heute pro Stunde, sonst pro Tag. Umschaltbar zwischen
+    Kosten, Tokens und Anfragen, farbig nach Anbieter.
+  - Tabelle je Anbieter und je Modell
+  - Bleibt erhalten, auch wenn du Chats löschst.
+- **Kontext-Anzeige im Chat** (oben rechts): Ein Balken zeigt, wie voll das Gedächtnis des
+  Modells ist. Ein Klick zeigt die Aufteilung (Nachrichten, Werkzeuge, System …) und ab
+  80 % einen Hinweis.
+- ⚠️ **Fehler bei den Kosten behoben:** Die Claude-Laufzeit meldet bei fortgesetzten Chats
+  die Gesamtsumme der Sitzung statt der Kosten einer Antwort. Dadurch wurden Kosten pro Chat
+  mehrfach gezählt. Jetzt wird nur der Unterschied gespeichert. Bestehende Chats werden beim
+  ersten Start automatisch korrigiert.
+- **Getestet:**
+  - 11 neue Tests, darunter ein echter Agent-Durchlauf mit drei Antworten im selben Chat.
+    Jede wird genau einmal gezählt, und der Kontext wird gemeldet.
+  - Die Korrektur alter Datenbanken ist ebenfalls getestet.
+  - Gesamt: 254 Tests, Smoke-Test OK, Screenshots im Dunkelmodus geprüft.
 
 ### 2026-10-10 13:35 – Handschrift-Erkennung, Pinokio und Office-Dateien ✅
 

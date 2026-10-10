@@ -9,6 +9,8 @@ export const PROVIDER_LABELS: Record<ProviderId, string> = {
   ollama: 'Ollama (local)',
 }
 
+export const SETTINGS_VERSION = 2
+
 export const SettingsSchema = z.object({
   activeProvider: ProviderIdSchema.default('anthropic'),
   /** Selected model id per provider. Empty string means "provider default". */
@@ -20,7 +22,7 @@ export const SettingsSchema = z.object({
     })
     .default({ anthropic: '', openrouter: '', ollama: '' }),
   ollamaBaseUrl: z.url().default('http://localhost:11434'),
-  theme: z.enum(['system', 'light', 'dark']).default('system'),
+  theme: z.enum(['system', 'light', 'dark']).default('dark'),
   /** Allow the agent to search the web and read pages (free, no API key). */
   webAccess: z.boolean().default(true),
   /** OpenRouter model used by the generate_image tool. */
@@ -43,6 +45,8 @@ export const SettingsSchema = z.object({
   ocrBaseUrl: z.string().default(''),
   /** Seconds the OCR model stays on the GPU after use (0 = unload immediately). */
   ocrKeepAliveSec: z.number().int().min(0).max(3600).default(60),
+  /** Version of the stored file, for one-time migrations of old defaults. */
+  settingsVersion: z.number().int().default(SETTINGS_VERSION),
 })
 export type Settings = z.infer<typeof SettingsSchema>
 

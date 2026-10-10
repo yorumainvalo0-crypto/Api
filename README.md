@@ -18,6 +18,7 @@ Der Agent-Kern ist das **Claude Agent SDK** (derselbe Kern wie Claude Code).
 | **Office**           | Word, Excel, PowerPoint (auch .doc/.xls/.odt/.ods/.rtf/.csv) lesen, in der App ansehen und vom Agenten neu erstellen lassen – ohne Office-Installation                                                                                            |
 | **Handschrift**      | Handschrift und Scans lokal in Text umwandeln (Ollama-Vision-Modell, z. B. auf einer RTX 4060); das Modell belegt die Grafikkarte nur während der Erkennung                                                                                       |
 | **Skills & Add-ons** | Skills und Plugins aus GitHub (z. B. `anthropics/skills`) oder lokalen Ordnern; MCP-Server aus der offiziellen Registry oder manuell                                                                                                              |
+| **Verbrauch**        | Statistik je Anbieter und Modell: Tokens (inkl. Cache), Kosten, Anfragen; Verlauf pro Stunde/Tag; Kontext-Anzeige im Chat                                                                                                                         |
 | **Sicherheit**       | Keys verschlüsselt (Windows DPAPI), Sandbox-Renderer, Dateizugriff nur auf App-Daten und geöffnete Projekte, Kostenlimit pro Anfrage                                                                                                              |
 
 ## Installation (Windows)

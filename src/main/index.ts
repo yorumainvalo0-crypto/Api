@@ -22,6 +22,7 @@ import { ChatRepository } from './storage/chat-repository'
 import { chatToMarkdown, exportFileName } from './storage/chat-export'
 import { openDatabase } from './storage/database'
 import { SecretStore } from './storage/secret-store'
+import { UsageRepository } from './storage/usage-repository'
 import { SettingsStore } from './storage/settings-store'
 import { storeAttachment } from './workspace/attachments'
 import { handleFileProtocol, registerFileProtocolScheme } from './workspace/file-protocol'
@@ -103,7 +104,9 @@ function bootstrap(): void {
     cipher,
   )
 
-  const chats = new ChatRepository(openDatabase(join(dataDir, 'workbench.db')))
+  const db = openDatabase(join(dataDir, 'workbench.db'))
+  const chats = new ChatRepository(db)
+  const usage = new UsageRepository(db)
   // Files may be served/saved from the data dir and from project folders the user opened.
   const allowedRoots = () => [
     dataDir,
@@ -131,6 +134,7 @@ function bootstrap(): void {
   let ocrDownload: AbortController | undefined
 
   const sessions = new SessionManager({
+    usage,
     comfyWorkflows,
     createWebServer: () => createWebMcpServer(web),
     getAddons: () => addons.agentConfig(),
@@ -266,6 +270,8 @@ function bootstrap(): void {
     'models:list': ({ provider }) => listModels(catalogArgs(provider)),
     'models:test': ({ provider }) => testConnection(catalogArgs(provider)),
     'chats:list': () => chats.list(),
+    'usage:summary': ({ range }) => usage.summary(range),
+    'usage:context': ({ chatId }) => usage.getContext(chatId),
     'chats:get': ({ chatId }) => chats.get(chatId) ?? null,
     'chats:rename': ({ chatId, title }) => {
       chats.rename(chatId, title)

@@ -29,6 +29,7 @@ import { applyReplyEvent, EMPTY_REPLY, type ReplyState } from '@shared/message-p
 import { fileUrl } from '@shared/ipc'
 import { api } from '../../lib/api'
 import { ModelPicker, cleanError } from '../../components/ModelPicker'
+import { ContextMeter } from '../usage/ContextMeter'
 import { ProjectPanel } from '../project/ProjectPanel'
 import { InlineMedia } from '../media/InlineMedia'
 import { OutputsPanel } from '../media/OutputsPanel'
@@ -244,7 +245,9 @@ export function ChatView(props: {
               </select>
             </>
           )}
-          <span className="ml-auto text-xs text-zinc-400">
+          <span className="ml-auto" />
+          <ContextMeter chatId={chatId} />
+          <span className="text-xs text-zinc-400">
             {totalCost > 0 ? `Kosten: $${totalCost.toFixed(4)}` : ''}
           </span>
           {isCode && (

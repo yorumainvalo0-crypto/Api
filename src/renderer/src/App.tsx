@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { MessageSquare, Puzzle, Settings as SettingsIcon } from 'lucide-react'
+import { BarChart3, MessageSquare, Moon, Puzzle, Settings as SettingsIcon, Sun } from 'lucide-react'
 import type { Settings } from '@shared/schemas/settings'
 import type { ChatSummary } from '@shared/schemas/chat'
 import { api } from './lib/api'
@@ -7,8 +7,9 @@ import { ChatView } from './features/chat/ChatView'
 import { ChatSidebar } from './features/chat/ChatSidebar'
 import { SettingsView } from './features/settings/SettingsView'
 import { AddonsView } from './features/addons/AddonsView'
+import { UsageView } from './features/usage/UsageView'
 
-type View = 'chat' | 'addons' | 'settings'
+type View = 'chat' | 'addons' | 'usage' | 'settings'
 
 export function App() {
   const [view, setView] = useState<View>('chat')
@@ -42,7 +43,10 @@ export function App() {
     })
   }, [refreshChats])
 
-  useTheme(settings?.theme ?? 'system')
+  const dark = useTheme(settings?.theme ?? 'dark')
+  const toggleTheme = useCallback(async () => {
+    setSettings(await api.invoke('settings:update', { theme: dark ? 'light' : 'dark' }))
+  }, [dark])
   const [focusSearch, setFocusSearch] = useState(0)
 
   const openProject = useCallback(async () => {
@@ -92,12 +96,23 @@ export function App() {
         >
           <Puzzle size={20} />
         </NavButton>
+        <NavButton label="Verbrauch" active={view === 'usage'} onClick={() => setView('usage')}>
+          <BarChart3 size={20} />
+        </NavButton>
         <NavButton
           label="Einstellungen"
           active={view === 'settings'}
           onClick={() => setView('settings')}
         >
           <SettingsIcon size={20} />
+        </NavButton>
+        <div className="mt-auto" />
+        <NavButton
+          label={dark ? 'Hell darstellen' : 'Dunkel darstellen'}
+          active={false}
+          onClick={() => void toggleTheme()}
+        >
+          {dark ? <Sun size={20} /> : <Moon size={20} />}
         </NavButton>
       </nav>
       <main className="flex min-w-0 flex-1">
@@ -122,6 +137,8 @@ export function App() {
           </>
         ) : view === 'addons' ? (
           <AddonsView />
+        ) : view === 'usage' ? (
+          <UsageView />
         ) : (
           <SettingsView settings={settings} onChange={setSettings} />
         )}
@@ -153,15 +170,20 @@ function NavButton(props: {
   )
 }
 
-function useTheme(theme: Settings['theme']) {
+/** Applies the theme to <html> and returns whether dark mode is active. */
+function useTheme(theme: Settings['theme']): boolean {
+  const [systemDark, setSystemDark] = useState(
+    () => window.matchMedia('(prefers-color-scheme: dark)').matches,
+  )
   useEffect(() => {
     const media = window.matchMedia('(prefers-color-scheme: dark)')
-    const apply = () => {
-      const dark = theme === 'dark' || (theme === 'system' && media.matches)
-      document.documentElement.classList.toggle('dark', dark)
-    }
-    apply()
-    media.addEventListener('change', apply)
-    return () => media.removeEventListener('change', apply)
-  }, [theme])
+    const onChange = () => setSystemDark(media.matches)
+    media.addEventListener('change', onChange)
+    return () => media.removeEventListener('change', onChange)
+  }, [])
+  const dark = theme === 'dark' || (theme === 'system' && systemDark)
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', dark)
+  }, [dark])
+  return dark
 }

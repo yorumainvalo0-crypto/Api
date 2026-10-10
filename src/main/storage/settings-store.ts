@@ -2,10 +2,22 @@ import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import {
   DEFAULT_SETTINGS,
+  SETTINGS_VERSION,
   SettingsSchema,
   type Settings,
   type SettingsPatch,
 } from '@shared/schemas/settings'
+
+/** Upgrades settings files written by older versions. */
+export function migrateSettings(raw: unknown): unknown {
+  if (typeof raw !== 'object' || raw === null) return raw
+  const data = { ...(raw as Record<string, unknown>) }
+  const version = typeof data['settingsVersion'] === 'number' ? data['settingsVersion'] : 1
+  // v2: dark mode became the default; files from v1 always stored the old default "system".
+  if (version < 2 && data['theme'] === 'system') data['theme'] = 'dark'
+  data['settingsVersion'] = SETTINGS_VERSION
+  return data
+}
 
 /** JSON-file backed settings, validated with Zod on every read and write. */
 export class SettingsStore {
@@ -21,7 +33,7 @@ export class SettingsStore {
     } catch {
       // Missing or corrupt file: fall back to defaults.
     }
-    const parsed = SettingsSchema.safeParse(raw)
+    const parsed = SettingsSchema.safeParse(migrateSettings(raw))
     this.cache = parsed.success ? parsed.data : DEFAULT_SETTINGS
     return this.cache
   }

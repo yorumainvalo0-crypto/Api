@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { ContextUsageSchema } from './usage'
 import { AttachmentSchema, ProducedFileSchema } from './chat'
 
 export const ChatRequestSchema = z.object({
@@ -52,6 +53,7 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
     costUsd: z.number(),
     durationMs: z.number(),
   }),
+  z.object({ ...base, type: z.literal('context'), context: ContextUsageSchema }),
   z.object({ ...base, type: z.literal('error'), message: z.string() }),
   z.object({ ...base, type: z.literal('done') }),
 ])

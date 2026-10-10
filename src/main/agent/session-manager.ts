@@ -9,12 +9,22 @@ import {
 } from '@anthropic-ai/claude-agent-sdk'
 import type { AgentEvent, ChatRequest, PermissionDecision } from '@shared/schemas/agent'
 import type { AgentPermissionMode, Attachment, ChatSummary } from '@shared/schemas/chat'
-import type { Settings } from '@shared/schemas/settings'
+import type { ProviderId, Settings } from '@shared/schemas/settings'
+import type { ContextUsage } from '@shared/schemas/usage'
 import { applyReplyEvent, EMPTY_REPLY, type ReplyState } from '@shared/message-parts'
 import type { SecretStore } from '../storage/secret-store'
 import type { ChatRepository } from '../storage/chat-repository'
 import { buildPromptBlocks } from '../workspace/attachments'
 import { extractDocument } from '../documents/extract'
+import type { UsageRepository } from '../storage/usage-repository'
+import { contextFromResult, parseContextResponse } from './context'
+import {
+  fromSdkModelUsage,
+  sumTotals,
+  usageDelta,
+  type ModelTotals,
+  type UsageSnapshot,
+} from './usage'
 import { isInside } from '../workspace/paths'
 import { buildProviderRuntime } from './providers'
 import { normalizeSdkMessage, type SdkMessageLike } from './normalize'
@@ -31,6 +41,8 @@ export interface SessionManagerDeps {
   getSettings: () => Settings
   secrets: SecretStore
   chats: ChatRepository
+  /** Token/cost log for the usage view; without it costs are still computed per answer. */
+  usage?: UsageRepository
   /** Root directory for per-chat workspaces and the isolated agent config. */
   dataDir: string
   appVersion: string
@@ -95,6 +107,19 @@ async function extractAttachedDocuments(attachments: Attachment[]): Promise<Map<
   return documents
 }
 
+/** Asks the runtime how full the context window is (summary mode, no extra API calls). */
+async function readContextUsage(q: Query): Promise<ContextUsage | undefined> {
+  try {
+    const response = await Promise.race([
+      q.getContextUsage({ detail: 'summary' }),
+      new Promise<undefined>((resolve) => setTimeout(() => resolve(undefined), 5000)),
+    ])
+    return parseContextResponse(response)
+  } catch {
+    return undefined
+  }
+}
+
 export function chatWorkspace(dataDir: string, chatId: string): string {
   return join(dataDir, 'chats', chatId)
 }
@@ -111,6 +136,8 @@ export class SessionError extends Error {
 export class SessionManager {
   private readonly active = new Map<string, ActiveRun>()
   private readonly permissions: PermissionBroker
+  /** Fallback when no usage repository is configured (tests). */
+  private readonly snapshots = new Map<string, UsageSnapshot>()
 
   constructor(private readonly deps: SessionManagerDeps) {
     this.permissions = new PermissionBroker(deps.emit)
@@ -173,6 +200,34 @@ export class SessionManager {
     return true
   }
 
+  /**
+   * Logs the tokens and cost of one answer (difference to the session's previous totals) and
+   * returns its cost in USD, or undefined when the SDK reported no usage.
+   */
+  private recordUsage(
+    chatId: string,
+    provider: ProviderId,
+    sessionId: string,
+    modelUsage: Parameters<typeof fromSdkModelUsage>[0],
+  ): number | undefined {
+    const current = fromSdkModelUsage(modelUsage)
+    if (Object.keys(current).length === 0) return undefined
+    const usage = this.deps.usage
+    const previous = usage ? usage.getSnapshot(chatId) : this.snapshots.get(chatId)
+    const snapshot = { sessionId, models: current }
+    if (usage) usage.setSnapshot(chatId, snapshot)
+    else this.snapshots.set(chatId, snapshot)
+
+    const delta = usageDelta(previous, sessionId, current)
+    // Local models are free; the SDK would price them like hosted ones.
+    const models: Record<string, ModelTotals> =
+      provider === 'ollama'
+        ? Object.fromEntries(Object.entries(delta).map(([m, t]) => [m, { ...t, costUsd: 0 }]))
+        : delta
+    if (Object.keys(models).length > 0) usage?.record({ chatId, provider, models })
+    return sumTotals(models).costUsd
+  }
+
   cancelAll(): void {
     for (const chatId of this.active.keys()) this.cancel(chatId)
   }
@@ -186,6 +241,8 @@ export class SessionManager {
       this.deps.emit(event)
     }
 
+    let endInput = () => {}
+    const inputDone = new Promise<void>((resolve) => (endInput = resolve))
     try {
       const settings = this.deps.getSettings()
       const provider = settings.activeProvider
@@ -336,20 +393,44 @@ export class SessionManager {
         { pdf: provider !== 'ollama' },
         documents,
       )
+      // The input stays open until the context usage was read after the answer; the runtime
+      // shuts down as soon as its input ends.
       const prompt = (async function* (): AsyncGenerator<SDKUserMessage> {
         yield {
           type: 'user',
           message: { role: 'user', content: blocks },
           parent_tool_use_id: null,
         }
+        await inputDone
       })()
 
       run.query = query({ prompt, options })
+      let sessionId = resume ?? ''
+      let model = ''
       for await (const message of run.query) {
         if (message.type === 'system' && message.subtype === 'init') {
+          sessionId = message.session_id
+          model = message.model
           chats.setSdkSessionId(chatId, message.session_id)
         }
-        for (const event of normalizeSdkMessage(chatId, message as SdkMessageLike)) emit(event)
+        const cost =
+          message.type === 'result'
+            ? this.recordUsage(chatId, provider, sessionId, message.modelUsage)
+            : undefined
+        for (const event of normalizeSdkMessage(chatId, message as SdkMessageLike)) {
+          // The SDK reports session totals; show and store what this answer cost.
+          emit(event.type === 'result' && cost !== undefined ? { ...event, costUsd: cost } : event)
+        }
+        if (message.type === 'result') {
+          const context =
+            (await readContextUsage(run.query)) ??
+            contextFromResult(message.usage, message.modelUsage, model)
+          endInput()
+          if (context) {
+            this.deps.usage?.setContext(chatId, context)
+            emit({ chatId, type: 'context', context })
+          }
+        }
       }
     } catch (error) {
       if (!run.abort.signal.aborted) {
@@ -360,6 +441,7 @@ export class SessionManager {
         })
       }
     } finally {
+      endInput()
       this.permissions.denyAll(chatId)
       if (run.abort.signal.aborted && !reply.error) reply = { ...reply, error: 'Abgebrochen.' }
       if (chats.exists(chatId)) {
