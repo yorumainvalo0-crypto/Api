@@ -1,6 +1,6 @@
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { copyFileSync, writeFileSync } from 'node:fs'
+import { copyFileSync, readFileSync, writeFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { app, BrowserWindow, dialog, safeStorage, shell } from 'electron'
 import log from 'electron-log/main'
@@ -12,6 +12,8 @@ import { listModels, testConnection } from './providers/model-catalog'
 import { createProjectHandlers } from './project/handlers'
 import { AddonStore } from './addons/addon-store'
 import { createAddonHandlers } from './addons/handlers'
+import { ComfyClient } from './media/comfy-client'
+import { ComfyWorkflowStore } from './media/comfy-workflows'
 import { isAllowedPath, isExecutable, listOutputs, outputsDir } from './media/outputs'
 import { ChatRepository } from './storage/chat-repository'
 import { chatToMarkdown, exportFileName } from './storage/chat-export'
@@ -121,7 +123,10 @@ function bootstrap(): void {
     pageLoader: createSmartLoader(fetchLoader, createChromiumLoader()),
   })
 
+  const comfyWorkflows = new ComfyWorkflowStore(join(dataDir, 'comfy'))
+
   const sessions = new SessionManager({
+    comfyWorkflows,
     createWebServer: () => createWebMcpServer(web),
     getAddons: () => addons.agentConfig(),
     getSettings: () => settings.get(),
@@ -144,6 +149,41 @@ function bootstrap(): void {
     }),
     'settings:get': () => settings.get(),
     'updates:check': () => checkForUpdates(),
+    'comfy:status': async () => {
+      const client = new ComfyClient({ baseUrl: settings.get().comfyUrl })
+      try {
+        const { version } = await client.systemStats()
+        const checkpoints = await client.checkpoints()
+        return {
+          ok: true,
+          message: `Verbunden mit ComfyUI ${version} (${checkpoints.length} Checkpoints).`,
+          checkpoints,
+        }
+      } catch (error) {
+        return {
+          ok: false,
+          message: error instanceof Error ? error.message : String(error),
+          checkpoints: [],
+        }
+      }
+    },
+    'comfy:workflows': () => comfyWorkflows.list(),
+    'comfy:workflow-import': async ({ name, kind }) => {
+      if (!mainWindow) return null
+      const result = await dialog.showOpenDialog(mainWindow, {
+        title: 'ComfyUI-Workflow (API-Format) wählen',
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+        properties: ['openFile'],
+      })
+      const file = result.filePaths[0]
+      if (result.canceled || !file) return null
+      return comfyWorkflows.import(name, kind, readFileSync(file, 'utf8'))
+    },
+    'comfy:workflow-remove': ({ id }) => {
+      comfyWorkflows.remove(id)
+      if (settings.get().comfyImageWorkflow === id) settings.update({ comfyImageWorkflow: '' })
+      return { ok: true }
+    },
     'updates:install': () => {
       installUpdateNow()
       return { ok: true }

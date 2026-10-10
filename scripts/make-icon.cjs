@@ -19,7 +19,10 @@ app.whenReady().then(async () => {
   await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(html)}`)
   await new Promise((r) => setTimeout(r, 300))
   const image = await win.webContents.capturePage({ x: 0, y: 0, width: 512, height: 512 })
-  writeFileSync(join(__dirname, '..', 'build', 'icon.png'), image.resize({ width: 512, height: 512 }).toPNG())
+  writeFileSync(
+    join(__dirname, '..', 'build', 'icon.png'),
+    image.resize({ width: 512, height: 512 }).toPNG(),
+  )
   console.log('icon written', image.getSize())
   app.quit()
 })

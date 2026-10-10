@@ -22,6 +22,8 @@ import { WEB_MCP_SERVER, WEB_TOOL_NAMES } from '../web/mcp-server'
 import { createMediaMcpServer, MEDIA_MCP_SERVER, MEDIA_TOOL_NAMES } from '../media/mcp-server'
 import { outputsDir } from '../media/outputs'
 import type { AgentAddonConfig } from '../addons/addon-store'
+import type { ComfyConfig } from '../media/comfy-generate'
+import type { ComfyWorkflowStore } from '../media/comfy-workflows'
 
 export interface SessionManagerDeps {
   getSettings: () => Settings
@@ -38,6 +40,10 @@ export interface SessionManagerDeps {
   mediaFetch?: typeof fetch
   /** Enabled skills, plugins and MCP servers. */
   getAddons?: () => AgentAddonConfig
+  /** Imported ComfyUI workflows (enables local image/3D generation). */
+  comfyWorkflows?: ComfyWorkflowStore
+  /** fetch used for ComfyUI (tests inject a fake server). */
+  comfyFetch?: typeof fetch
 }
 
 interface ActiveRun {
@@ -188,16 +194,39 @@ export class SessionManager {
       const resume = chats.getSdkSessionId(chatId)
       const web =
         settings.webAccess && this.deps.createWebServer ? this.deps.createWebServer() : undefined
+      const store = this.deps.comfyWorkflows
+      const comfyConfig = store
+        ? (): ComfyConfig => {
+            const current = this.deps.getSettings()
+            return {
+              url: current.comfyUrl,
+              checkpoint: current.comfyCheckpoint,
+              imageWorkflowId: current.comfyImageWorkflow,
+              resolution: current.comfyResolution,
+              store,
+              ...(this.deps.comfyFetch
+                ? { fetchImpl: this.deps.comfyFetch, pollIntervalMs: 10 }
+                : {}),
+            }
+          }
+        : undefined
       const media = createMediaMcpServer({
         outputsDir: outputsDir(dataDir, chat),
         readableRoots: [
           chatWorkspace(dataDir, chatId),
           ...(chat.projectPath ? [chat.projectPath] : []),
         ],
-        getImageConfig: () => ({
-          apiKey: this.deps.secrets.get('openrouter'),
-          model: this.deps.getSettings().imageModel,
-        }),
+        getImageConfig: () => {
+          const current = this.deps.getSettings()
+          return current.imageBackend === 'comfyui' && comfyConfig
+            ? { backend: 'comfyui', comfy: comfyConfig() }
+            : {
+                backend: 'openrouter',
+                apiKey: this.deps.secrets.get('openrouter'),
+                model: current.imageModel,
+              }
+        },
+        ...(comfyConfig ? { getComfyConfig: comfyConfig } : {}),
         onFile: (file) => emit({ chatId, type: 'output-file', file }),
         ...(this.deps.mediaFetch ? { fetchImpl: this.deps.mediaFetch } : {}),
       })

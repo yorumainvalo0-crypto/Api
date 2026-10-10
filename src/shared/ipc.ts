@@ -17,6 +17,11 @@ import { ConnectionTestResultSchema, ModelInfoSchema } from './schemas/models'
 import { projectContract, projectEvents } from './ipc-project'
 import { addonsContract } from './ipc-addons'
 import { OutputFileSchema } from './schemas/media'
+import {
+  ComfyStatusSchema,
+  ComfyWorkflowInfoSchema,
+  ComfyWorkflowKindSchema,
+} from './schemas/comfy'
 
 const ChatIdInput = z.object({ chatId: z.string().min(1) })
 
@@ -43,6 +48,18 @@ export const ipcContract = {
     }),
   },
   'updates:install': { input: z.void(), output: z.object({ ok: z.boolean() }) },
+  /** Tests the ComfyUI connection (current settings) and lists installed checkpoints. */
+  'comfy:status': { input: z.void(), output: ComfyStatusSchema },
+  'comfy:workflows': { input: z.void(), output: z.array(ComfyWorkflowInfoSchema) },
+  /** Opens a file picker for an API-format workflow JSON and imports it. */
+  'comfy:workflow-import': {
+    input: z.object({ name: z.string().min(1).max(80), kind: ComfyWorkflowKindSchema }),
+    output: ComfyWorkflowInfoSchema.nullable(),
+  },
+  'comfy:workflow-remove': {
+    input: z.object({ id: z.string() }),
+    output: z.object({ ok: z.boolean() }),
+  },
   'settings:update': { input: SettingsPatchSchema, output: SettingsSchema },
   'secrets:status': { input: z.void(), output: SecretStatusSchema },
   'secrets:set': {

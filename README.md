@@ -8,15 +8,15 @@ Der Agent-Kern ist das **Claude Agent SDK** (derselbe Kern wie Claude Code).
 
 ## Funktionen
 
-| Bereich              | Was geht                                                                                                                                                                                                        |
-| -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Chat**             | Anthropic, OpenRouter (alle Modelle) oder Ollama; Live-Modellliste mit Preisen; Streaming; Kosten pro Chat; Chats werden gespeichert, durchsuchbar, als Markdown exportierbar                                   |
-| **Dateien senden**   | Drag & Drop, Strg+V (Screenshots), 📎 – Bilder, PDFs, Code/Text, beliebige Dateien                                                                                                                              |
-| **Coding-Agent**     | „Projekt öffnen“: Der Agent liest/ändert Dateien und führt Befehle aus – mit Freigaben (Erlauben / Immer / Ablehnen) und vier Modi; Diffs, Dateibaum, Git, Terminal; gefährliche Befehle werden immer blockiert |
-| **Internet**         | Websuche (DuckDuckGo/Bing) und Seiten lesen im eingebauten Chromium – kostenlos, ohne Key, ohne Server                                                                                                          |
-| **Bilder & 3D**      | Bilder erzeugen/bearbeiten über OpenRouter-Bildmodelle; 3D-Modelle (OBJ/STL/PLY/glTF/GLB) erzeugen und interaktiv ansehen                                                                                       |
-| **Skills & Add-ons** | Skills und Plugins aus GitHub (z. B. `anthropics/skills`) oder lokalen Ordnern; MCP-Server aus der offiziellen Registry oder manuell                                                                            |
-| **Sicherheit**       | Keys verschlüsselt (Windows DPAPI), Sandbox-Renderer, Dateizugriff nur auf App-Daten und geöffnete Projekte, Kostenlimit pro Anfrage                                                                            |
+| Bereich              | Was geht                                                                                                                                                                                                                                          |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Chat**             | Anthropic, OpenRouter (alle Modelle) oder Ollama; Live-Modellliste mit Preisen; Streaming; Kosten pro Chat; Chats werden gespeichert, durchsuchbar, als Markdown exportierbar                                                                     |
+| **Dateien senden**   | Drag & Drop, Strg+V (Screenshots), 📎 – Bilder, PDFs, Code/Text, beliebige Dateien                                                                                                                                                                |
+| **Coding-Agent**     | „Projekt öffnen“: Der Agent liest/ändert Dateien und führt Befehle aus – mit Freigaben (Erlauben / Immer / Ablehnen) und vier Modi; Diffs, Dateibaum, Git, Terminal; gefährliche Befehle werden immer blockiert                                   |
+| **Internet**         | Websuche (DuckDuckGo/Bing) und Seiten lesen im eingebauten Chromium – kostenlos, ohne Key, ohne Server                                                                                                                                            |
+| **Bilder & 3D**      | Bilder erzeugen/bearbeiten über OpenRouter **oder lokal mit ComfyUI** (kostenlos); echte 3D-Modelle (GLB) über ComfyUI-Workflows wie Hunyuan3D oder vom Agenten als OBJ/STL/PLY/glTF geschrieben; interaktiver 3D-Viewer, PDF-Vorschau in der App |
+| **Skills & Add-ons** | Skills und Plugins aus GitHub (z. B. `anthropics/skills`) oder lokalen Ordnern; MCP-Server aus der offiziellen Registry oder manuell                                                                                                              |
+| **Sicherheit**       | Keys verschlüsselt (Windows DPAPI), Sandbox-Renderer, Dateizugriff nur auf App-Daten und geöffnete Projekte, Kostenlimit pro Anfrage                                                                                                              |
 
 ## Installation (Windows)
 
@@ -41,6 +41,14 @@ manuell aus dem Release laden.
    Ergebnisse erscheinen im Chat und im Panel „Ergebnisse“.
 5. **Add-ons** (Puzzle-Symbol): Unter „Entdecken“ `anthropics/skills` eingeben oder die
    MCP-Registry durchsuchen.
+
+**Lokale Bilder & 3D mit ComfyUI:** [ComfyUI](https://github.com/comfyanonymous/ComfyUI)
+installieren und starten (Port 8188), ein Checkpoint-Modell laden. In den Einstellungen unter
+„Bild- und 3D-Generierung“ auf „ComfyUI (lokal)“ stellen und „Verbindung testen“. Eigene
+Workflows: in ComfyUI „Workflow → Export (API)“, im Prompt-Feld `{{prompt}}` eintragen
+(optional `{{input_image}}`, `{{seed}}`, `{{negative}}`) und als Bild- oder 3D-Workflow
+importieren. Ein 3D-Workflow (z. B. Hunyuan3D mit „Save GLB“) wird dem Agenten automatisch als
+Werkzeug angeboten.
 
 Ollama: Ollama ≥ 0.14 installieren, Modell laden (`ollama pull qwen3:8b`), in den Einstellungen
 Provider „Ollama“ und das Modell wählen. Für Werkzeug-Nutzung sind Claude-Modelle am

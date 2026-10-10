@@ -27,6 +27,15 @@ export const SettingsSchema = z.object({
   imageModel: z.string().default('google/gemini-3.1-flash-lite-image'),
   /** Stops a single request once it costs more than this (USD); 0 = no limit. */
   maxBudgetUsd: z.number().min(0).max(1000).default(0),
+  /** Where generate_image runs: OpenRouter (cloud) or a local ComfyUI. */
+  imageBackend: z.enum(['openrouter', 'comfyui']).default('openrouter'),
+  comfyUrl: z.url().default('http://127.0.0.1:8188'),
+  /** Checkpoint for the built-in text-to-image workflow (empty = first available). */
+  comfyCheckpoint: z.string().default(''),
+  /** Imported image workflow to use instead of the built-in one (empty = built-in). */
+  comfyImageWorkflow: z.string().default(''),
+  /** Long image side for the built-in workflow (512 for SD 1.5, 1024 for SDXL/Flux). */
+  comfyResolution: z.number().int().min(256).max(2048).default(1024),
 })
 export type Settings = z.infer<typeof SettingsSchema>
 
@@ -48,6 +57,11 @@ export const SettingsPatchSchema = z
     webAccess: z.boolean(),
     imageModel: z.string(),
     maxBudgetUsd: z.number().min(0).max(1000),
+    imageBackend: z.enum(['openrouter', 'comfyui']),
+    comfyUrl: z.url(),
+    comfyCheckpoint: z.string(),
+    comfyImageWorkflow: z.string(),
+    comfyResolution: z.number().int().min(256).max(2048),
   })
   .partial()
 export type SettingsPatch = z.infer<typeof SettingsPatchSchema>

@@ -6,12 +6,23 @@ import type { OutputFile } from '@shared/schemas/media'
 import { classify, detectMime, MODEL_IMAGE_TYPES, sanitizeName } from '../workspace/attachments'
 import { isAllowedPath } from './outputs'
 import { generateImages } from './image-generation'
+import {
+  comfyGenerate3d,
+  comfyGenerateImage,
+  type ComfyConfig,
+  type ComfyInputImage,
+} from './comfy-generate'
 
 export const MEDIA_MCP_SERVER = 'media'
 export const MEDIA_TOOL_NAMES = [
   `mcp__${MEDIA_MCP_SERVER}__generate_image`,
   `mcp__${MEDIA_MCP_SERVER}__save_file`,
+  `mcp__${MEDIA_MCP_SERVER}__generate_3d_model`,
 ]
+
+export type ImageBackendConfig =
+  | { backend: 'openrouter'; apiKey: string | undefined; model: string }
+  | { backend: 'comfyui'; comfy: ComfyConfig }
 
 const EXT_BY_MIME: Record<string, string> = {
   'image/png': '.png',
@@ -20,12 +31,22 @@ const EXT_BY_MIME: Record<string, string> = {
   'image/gif': '.gif',
 }
 
+function readInputImage(path: string, roots: string[]): ComfyInputImage {
+  if (!isAllowedPath(path, roots))
+    throw new Error(`Eingabebild außerhalb der erlaubten Ordner: ${path}`)
+  const mimeType = detectMime(path)
+  if (!MODEL_IMAGE_TYPES.has(mimeType)) throw new Error(`Kein unterstütztes Bild: ${path}`)
+  return { path, mimeType, data: readFileSync(path) }
+}
+
 export interface MediaServerOptions {
   /** Folder that receives generated files. */
   outputsDir: string
   /** Folders input images may be read from (chat attachments, project). */
   readableRoots: string[]
-  getImageConfig: () => { apiKey: string | undefined; model: string }
+  getImageConfig: () => ImageBackendConfig
+  /** Local ComfyUI setup used by generate_3d_model (only offered when 3D workflows exist). */
+  getComfyConfig?: () => ComfyConfig
   /** Called for every file written, so the UI can show it inline. */
   onFile: (file: OutputFile) => void
   fetchImpl?: typeof fetch
@@ -77,6 +98,56 @@ export function createMediaMcpServer(options: MediaServerOptions) {
     return file
   }
 
+  const comfy = options.getComfyConfig?.()
+  const workflows3d = comfy ? comfy.store.list().filter((w) => w.kind === '3d') : []
+  const tool3d =
+    comfy && workflows3d.length > 0
+      ? [
+          tool(
+            'generate_3d_model',
+            'Generates a real 3D model (e.g. GLB) locally with ComfyUI from a text prompt and/or an ' +
+              `input image. Available workflows: ${workflows3d.map((w) => `"${w.name}" (${w.placeholders.join(', ')})`).join('; ')}.`,
+            {
+              prompt: z.string().describe('Description of the object'),
+              input_image_path: z
+                .string()
+                .optional()
+                .describe('Absolute path of a reference image'),
+              workflow: z.string().optional().describe('Workflow name; default: the first one'),
+              file_name: z.string().optional().describe('Base file name without extension'),
+            },
+            async ({ prompt, input_image_path, workflow, file_name }) => {
+              try {
+                const chosen =
+                  workflows3d.find((w) => w.name.toLowerCase() === workflow?.toLowerCase()) ??
+                  workflows3d[0]
+                if (!chosen) throw new Error('Kein 3D-Workflow vorhanden.')
+                const inputImage = input_image_path
+                  ? readInputImage(input_image_path, options.readableRoots)
+                  : undefined
+                const files = await comfyGenerate3d(comfy, {
+                  workflowId: chosen.id,
+                  prompt,
+                  inputImage,
+                })
+                const base = safeOutputName(file_name ?? 'modell', 'modell')
+                const saved = files.map((f) =>
+                  write(`${base}${extname(f.filename) || '.glb'}`, f.data),
+                )
+                return textResult(
+                  [
+                    `${saved.length} Datei(en) mit „${chosen.name}“ erzeugt und dem Nutzer angezeigt:`,
+                    ...saved.map((f) => `- ${f.path}`),
+                  ].join('\n'),
+                )
+              } catch (error) {
+                return textResult(error instanceof Error ? error.message : String(error), true)
+              }
+            },
+          ),
+        ]
+      : []
+
   return createSdkMcpServer({
     name: MEDIA_MCP_SERVER,
     version: '1.0.0',
@@ -100,31 +171,44 @@ export function createMediaMcpServer(options: MediaServerOptions) {
         },
         async ({ prompt, input_image_paths, aspect_ratio, file_name }) => {
           try {
-            const inputImages = (input_image_paths ?? []).map((path) => {
-              if (!isAllowedPath(path, options.readableRoots)) {
-                throw new Error(`Eingabebild außerhalb der erlaubten Ordner: ${path}`)
-              }
-              const mimeType = detectMime(path)
-              if (!MODEL_IMAGE_TYPES.has(mimeType))
-                throw new Error(`Kein unterstütztes Bild: ${path}`)
-              return { mimeType, base64: readFileSync(path).toString('base64') }
-            })
-            const { model, apiKey } = options.getImageConfig()
+            const inputImages = (input_image_paths ?? []).map((p) =>
+              readInputImage(p, options.readableRoots),
+            )
+            const config = options.getImageConfig()
+            const base = safeOutputName(file_name ?? 'bild', 'bild')
+            if (config.backend === 'comfyui') {
+              const { files, workflowName } = await comfyGenerateImage(config.comfy, {
+                prompt,
+                aspectRatio: aspect_ratio,
+                inputImages,
+              })
+              const saved = files.map((f) =>
+                write(`${base}${extname(f.filename) || '.png'}`, f.data),
+              )
+              return textResult(
+                [
+                  `${saved.length} Datei(en) lokal erzeugt mit ${workflowName} und dem Nutzer angezeigt:`,
+                  ...saved.map((f) => `- ${f.path}`),
+                ].join('\n'),
+              )
+            }
             const { images, text } = await generateImages({
               prompt,
-              model,
-              apiKey,
-              inputImages,
+              model: config.model,
+              apiKey: config.apiKey,
+              inputImages: inputImages.map((img) => ({
+                mimeType: img.mimeType,
+                base64: img.data.toString('base64'),
+              })),
               aspectRatio: aspect_ratio,
               ...(options.fetchImpl ? { fetchImpl: options.fetchImpl } : {}),
             })
-            const base = safeOutputName(file_name ?? 'bild', 'bild')
             const saved = images.map((img) =>
               write(`${base}${EXT_BY_MIME[img.mimeType] ?? '.png'}`, img.data),
             )
             return textResult(
               [
-                `${saved.length} Bild(er) erzeugt mit ${model} und dem Nutzer angezeigt:`,
+                `${saved.length} Bild(er) erzeugt mit ${config.model} und dem Nutzer angezeigt:`,
                 ...saved.map((f) => `- ${f.path}`),
                 ...(text ? ['', `Modell-Hinweis: ${text}`] : []),
               ].join('\n'),
@@ -157,6 +241,7 @@ export function createMediaMcpServer(options: MediaServerOptions) {
           }
         },
       ),
+      ...tool3d,
     ],
   })
 }

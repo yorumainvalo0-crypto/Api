@@ -6,14 +6,12 @@ import {
   type SecretStatus,
   type Settings,
 } from '@shared/schemas/settings'
-import type { ModelInfo } from '@shared/schemas/models'
 import type { IpcOutput } from '@shared/ipc'
 import { api } from '../../lib/api'
 import { ModelPicker, cleanError } from '../../components/ModelPicker'
+import { ImageGenerationSection } from './ImageGenerationSection'
 
 const PROVIDERS = ProviderIdSchema.options
-
-const imageCapable = (m: ModelInfo) => m.outputModalities.includes('image')
 
 export function SettingsView(props: { settings: Settings; onChange: (s: Settings) => void }) {
   const { settings, onChange } = props
@@ -87,19 +85,7 @@ export function SettingsView(props: { settings: Settings; onChange: (s: Settings
           </p>
         </section>
 
-        <section className="space-y-2">
-          <h2 className="font-medium">Bildgenerierung</h2>
-          <p className="text-xs text-zinc-500">
-            Bilder werden über OpenRouter erzeugt (benötigt den OpenRouter-Key). Gilt für Chat und
-            Coding.
-          </p>
-          <ModelPicker
-            provider="openrouter"
-            value={settings.imageModel}
-            onChange={(model) => void update({ imageModel: model })}
-            filter={imageCapable}
-          />
-        </section>
+        <ImageGenerationSection settings={settings} update={update} />
 
         <section className="space-y-2">
           <h2 className="font-medium">Kostenlimit</h2>
