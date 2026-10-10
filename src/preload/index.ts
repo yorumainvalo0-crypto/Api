@@ -1,4 +1,4 @@
-import { contextBridge, ipcRenderer, type IpcRendererEvent } from 'electron'
+import { contextBridge, ipcRenderer, webUtils, type IpcRendererEvent } from 'electron'
 import { IPC_EVENT_PREFIX, IPC_INVOKE_PREFIX } from '@shared/ipc-channels'
 import type { WorkbenchApi } from '@shared/ipc'
 
@@ -13,6 +13,7 @@ const api: WorkbenchApi = {
       ipcRenderer.removeListener(channel, wrapped)
     }
   },
+  getPathForFile: (file) => webUtils.getPathForFile(file),
 }
 
 contextBridge.exposeInMainWorld('api', api)

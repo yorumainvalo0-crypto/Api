@@ -7,6 +7,7 @@ import {
   type Settings,
 } from '@shared/schemas/settings'
 import { api } from '../../lib/api'
+import { ModelPicker, cleanError } from '../../components/ModelPicker'
 
 const PROVIDERS = ProviderIdSchema.options
 
@@ -92,16 +93,27 @@ function ProviderSection(props: {
 }) {
   const { provider, settings, hasKey } = props
   const [keyDraft, setKeyDraft] = useState('')
-  const [modelDraft, setModelDraft] = useState(settings.models[provider])
   const [error, setError] = useState<string | null>(null)
+  const [test, setTest] = useState<{ ok: boolean; message: string } | null>(null)
+  const [testing, setTesting] = useState(false)
+  const [pickerKey, setPickerKey] = useState(0)
+
+  const runTest = async () => {
+    setTesting(true)
+    setTest(await api.invoke('models:test', { provider }))
+    setTesting(false)
+    // Reload the model list with the new credentials.
+    setPickerKey((k) => k + 1)
+  }
 
   const saveKey = async () => {
     setError(null)
     try {
       props.onSecrets(await api.invoke('secrets:set', { provider, value: keyDraft }))
       setKeyDraft('')
+      await runTest()
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e))
+      setError(cleanError(e))
     }
   }
 
@@ -144,27 +156,43 @@ function ProviderSection(props: {
         </div>
       </label>
 
-      <label className="block space-y-1 text-sm">
-        <span className="text-zinc-500">Modell-ID</span>
-        <input
-          value={modelDraft}
-          placeholder={
-            provider === 'anthropic' ? 'leer = Standardmodell' : 'z. B. Modell-ID eingeben'
+      <div className="space-y-1 text-sm">
+        <span className="text-zinc-500">Modell</span>
+        <ModelPicker
+          key={pickerKey}
+          provider={provider}
+          value={settings.models[provider]}
+          onChange={(model) =>
+            void props.onUpdate({ models: { ...settings.models, [provider]: model } })
           }
-          onChange={(e) => setModelDraft(e.target.value)}
-          onBlur={() =>
-            void props.onUpdate({ models: { ...settings.models, [provider]: modelDraft.trim() } })
-          }
-          className="w-full rounded-md border border-zinc-300 bg-transparent px-2 py-1.5 dark:border-zinc-700"
         />
-      </label>
+      </div>
+
+      <div className="flex items-center gap-3 text-sm">
+        <button
+          type="button"
+          disabled={testing}
+          onClick={() => void runTest()}
+          className="rounded-md border border-zinc-300 px-3 py-1 disabled:opacity-50 dark:border-zinc-700"
+        >
+          {testing ? 'Teste …' : 'Verbindung testen'}
+        </button>
+        {test && (
+          <span className={test.ok ? 'text-green-600' : 'text-red-600'}>{test.message}</span>
+        )}
+      </div>
 
       {provider === 'ollama' && (
         <label className="block space-y-1 text-sm">
           <span className="text-zinc-500">Ollama-URL</span>
           <input
             defaultValue={settings.ollamaBaseUrl}
-            onBlur={(e) => void props.onUpdate({ ollamaBaseUrl: e.target.value.trim() })}
+            onBlur={(e) =>
+              void props
+                .onUpdate({ ollamaBaseUrl: e.target.value.trim() })
+                .then(() => setError(null))
+                .catch(() => setError('Ungültige URL (Beispiel: http://localhost:11434)'))
+            }
             className="w-full rounded-md border border-zinc-300 bg-transparent px-2 py-1.5 dark:border-zinc-700"
           />
         </label>

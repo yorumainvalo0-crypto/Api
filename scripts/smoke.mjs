@@ -8,7 +8,13 @@ import electronPath from 'electron'
 import { startMockAnthropic } from './mock-anthropic.ts'
 
 const MOCK_REPLY = 'Smoke-Antwort vom Mock'
-const mock = await startMockAnthropic(MOCK_REPLY)
+// Echo how many images reached the API so the attachment pipeline is verified end to end.
+const mock = await startMockAnthropic((body) => {
+  const blocks = (body?.messages ?? [])
+    .filter((m) => m.role === 'user' && Array.isArray(m.content))
+    .flatMap((m) => m.content)
+  return `${MOCK_REPLY} (Bilder: ${blocks.filter((b) => b.type === 'image').length})`
+})
 const userData = mkdtempSync(join(tmpdir(), 'aiw-smoke-'))
 // `--packaged <executable>` runs the smoke test against a packaged build instead of the sources.
 const packagedIndex = process.argv.indexOf('--packaged')
@@ -44,7 +50,7 @@ child.on('exit', async (code) => {
       .filter((l) => l.startsWith('[smoke]'))
       .join('\n'),
   )
-  const chatOk = output.includes(`"chatText":"${MOCK_REPLY}"`)
+  const chatOk = output.includes(`"chatText":"${MOCK_REPLY} (Bilder: 1)"`)
   if (code === 0 && output.includes('[smoke] OK') && chatOk) {
     console.log('Smoke test passed.')
     process.exit(0)

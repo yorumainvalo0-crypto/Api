@@ -30,11 +30,11 @@ export type SdkMessageLike =
   | { type: string }
 
 /** Converts one SDK message into zero or more renderer events. */
-export function normalizeSdkMessage(sessionId: string, msg: SdkMessageLike): AgentEvent[] {
+export function normalizeSdkMessage(chatId: string, msg: SdkMessageLike): AgentEvent[] {
   switch (msg.type) {
     case 'system': {
       if ('subtype' in msg && msg.subtype === 'init' && 'model' in msg && 'tools' in msg) {
-        return [{ sessionId, type: 'init', model: msg.model, tools: msg.tools }]
+        return [{ chatId, type: 'init', model: msg.model, tools: msg.tools }]
       }
       return []
     }
@@ -42,7 +42,7 @@ export function normalizeSdkMessage(sessionId: string, msg: SdkMessageLike): Age
       if (!('event' in msg) || msg.parent_tool_use_id !== null) return []
       const { event } = msg
       if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
-        return event.delta.text ? [{ sessionId, type: 'text-delta', text: event.delta.text }] : []
+        return event.delta.text ? [{ chatId, type: 'text-delta', text: event.delta.text }] : []
       }
       return []
     }
@@ -51,10 +51,10 @@ export function normalizeSdkMessage(sessionId: string, msg: SdkMessageLike): Age
       const events: AgentEvent[] = []
       for (const block of msg.message.content) {
         if (block.type === 'text' && 'text' in block) {
-          events.push({ sessionId, type: 'assistant-text', text: block.text })
+          events.push({ chatId, type: 'assistant-text', text: block.text })
         } else if (block.type === 'tool_use' && 'id' in block) {
           events.push({
-            sessionId,
+            chatId,
             type: 'tool-use',
             toolUseId: block.id,
             name: block.name,
@@ -69,7 +69,7 @@ export function normalizeSdkMessage(sessionId: string, msg: SdkMessageLike): Age
       const text = msg.result ?? msg.errors?.join('\n') ?? ''
       return [
         {
-          sessionId,
+          chatId,
           type: 'result',
           isError: msg.is_error || msg.subtype !== 'success',
           text,

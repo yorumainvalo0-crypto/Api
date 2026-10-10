@@ -1,12 +1,18 @@
+import { rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { app, BrowserWindow, safeStorage, shell } from 'electron'
+import { app, BrowserWindow, dialog, safeStorage, shell } from 'electron'
 import log from 'electron-log/main'
 import pkg from '../../package.json'
-import { SessionManager } from './agent/session-manager'
+import { chatAttachmentsDir, chatWorkspace, SessionManager } from './agent/session-manager'
 import { resolveClaudeExecutable } from './agent/executable'
 import { registerIpcHandlers, sendEvent } from './ipc/register'
+import { listModels, testConnection } from './providers/model-catalog'
+import { ChatRepository } from './storage/chat-repository'
+import { openDatabase } from './storage/database'
 import { SecretStore } from './storage/secret-store'
 import { SettingsStore } from './storage/settings-store'
+import { storeAttachment } from './workspace/attachments'
+import { handleFileProtocol, registerFileProtocolScheme } from './workspace/file-protocol'
 import { runSmokeTest } from './smoke'
 
 const isSmokeTest = process.argv.includes('--smoke-test')
@@ -15,6 +21,7 @@ const isSmokeTest = process.argv.includes('--smoke-test')
 if (process.env['AIW_USER_DATA']) app.setPath('userData', process.env['AIW_USER_DATA'])
 
 log.initialize()
+registerFileProtocolScheme()
 
 let mainWindow: BrowserWindow | undefined
 
@@ -35,9 +42,7 @@ function createWindow(): BrowserWindow {
     },
   })
 
-  win.once('ready-to-show', () => {
-    if (!isSmokeTest) win.show()
-  })
+  win.once('ready-to-show', () => win.show())
 
   // Open external links in the default browser, never inside the app.
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -64,9 +69,19 @@ function bootstrap(): void {
     decrypt: (data) => safeStorage.decryptString(data),
   })
 
+  const chats = new ChatRepository(openDatabase(join(dataDir, 'workbench.db')))
+  handleFileProtocol(dataDir)
+
+  const catalogArgs = (provider: Parameters<typeof listModels>[0]['provider']) => ({
+    provider,
+    secret: secrets.get(provider),
+    ollamaBaseUrl: settings.get().ollamaBaseUrl,
+  })
+
   const sessions = new SessionManager({
     getSettings: () => settings.get(),
     secrets,
+    chats,
     dataDir,
     appVersion: app.getVersion(),
     executablePath: resolveClaudeExecutable(),
@@ -80,6 +95,7 @@ function bootstrap(): void {
       version: app.getVersion(),
       platform: `${process.platform}-${process.arch}`,
       agentSdkVersion: pkg.dependencies['@anthropic-ai/claude-agent-sdk'],
+      dataDir,
     }),
     'settings:get': () => settings.get(),
     'settings:update': (patch) => settings.update(patch),
@@ -92,8 +108,42 @@ function bootstrap(): void {
       secrets.clear(provider)
       return secrets.status()
     },
+    'models:list': ({ provider }) => listModels(catalogArgs(provider)),
+    'models:test': ({ provider }) => testConnection(catalogArgs(provider)),
+    'chats:list': () => chats.list(),
+    'chats:get': ({ chatId }) => chats.get(chatId) ?? null,
+    'chats:rename': ({ chatId, title }) => {
+      chats.rename(chatId, title)
+      return { ok: true }
+    },
+    'chats:delete': ({ chatId }) => {
+      sessions.cancel(chatId)
+      chats.delete(chatId)
+      rmSync(chatWorkspace(dataDir, chatId), { recursive: true, force: true })
+      return { ok: true }
+    },
+    'attachments:add': ({ chatId, files }) => {
+      const dir = chatAttachmentsDir(dataDir, chatId)
+      const attachments = []
+      const errors: string[] = []
+      for (const file of files) {
+        try {
+          attachments.push(storeAttachment(file, dir))
+        } catch (error) {
+          errors.push(error instanceof Error ? error.message : String(error))
+        }
+      }
+      return { attachments, errors }
+    },
+    'dialog:open-files': async () => {
+      if (!mainWindow) return []
+      const result = await dialog.showOpenDialog(mainWindow, {
+        properties: ['openFile', 'multiSelections'],
+      })
+      return result.canceled ? [] : result.filePaths
+    },
     'agent:send': (request) => ({ accepted: sessions.send(request) }),
-    'agent:cancel': ({ sessionId }) => ({ ok: sessions.cancel(sessionId) }),
+    'agent:cancel': ({ chatId }) => ({ ok: sessions.cancel(chatId) }),
   })
 
   app.on('before-quit', () => sessions.cancelAll())

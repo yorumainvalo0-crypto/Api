@@ -1,3 +1,4 @@
+import { writeFileSync } from 'node:fs'
 import { app, type BrowserWindow } from 'electron'
 import log from 'electron-log/main'
 
@@ -45,9 +46,28 @@ export function runSmokeTest(win: BrowserWindow): void {
             if (e.type === 'done') { off(); resolve() }
           })
         })
-        result.accepted = (await window.api.invoke('agent:send', { sessionId: 'smoke', prompt: 'Hallo' })).accepted
+        // Attach a pasted 1x1 PNG like a screenshot from the clipboard.
+        const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='
+        const added = await window.api.invoke('attachments:add', {
+          chatId: 'smoke',
+          files: [{ source: 'data', name: 'screenshot.png', mimeType: 'image/png', base64: png }],
+        })
+        result.attachmentErrors = added.errors
+        const attachment = added.attachments[0]
+        // The image must be viewable through the protected file protocol ...
+        const toUrl = (p) => 'aiw-file://local/' + encodeURIComponent(p)
+        result.previewStatus = (await fetch(toUrl(attachment.path))).status
+        // ... while paths outside the data directory are refused.
+        result.outsideStatus = await fetch(toUrl('/etc/hosts')).then((r) => r.status, () => 'blocked')
+
+        result.accepted = (await window.api.invoke('agent:send', {
+          chatId: 'smoke', prompt: 'Hallo', attachments: added.attachments,
+        })).accepted
         await finished
         result.events = [...new Set(events)]
+        const chat = await window.api.invoke('chats:get', { chatId: 'smoke' })
+        result.persisted = chat?.messages.map((m) => m.role + ':' + m.attachments.length).join(',')
+        result.listed = (await window.api.invoke('chats:list')).some((c) => c.id === 'smoke')
       }
       return result
     })()`
@@ -63,10 +83,32 @@ export function runSmokeTest(win: BrowserWindow): void {
           if (typeof result['chatText'] !== 'string' || !result['chatText']) {
             return fail('chat produced no streamed text')
           }
+          if (result['previewStatus'] !== 200) return fail('attachment preview not served')
+          if (result['outsideStatus'] === 200)
+            return fail('file protocol served a file outside data dir')
+          if (result['persisted'] !== 'user:1,assistant:0') return fail('chat not persisted')
+          if (result['listed'] !== true) return fail('chat missing from list')
         }
-        console.log('[smoke] OK')
-        app.exit(0)
+        void captureScreenshot(win).then(() => {
+          console.log('[smoke] OK')
+          app.exit(0)
+        })
       })
       .catch((error: unknown) => fail(String(error)))
   })
+}
+
+/** Optionally saves a screenshot of the opened smoke chat (AIW_SMOKE_SCREENSHOT=<file.png>). */
+async function captureScreenshot(win: BrowserWindow): Promise<void> {
+  const target = process.env['AIW_SMOKE_SCREENSHOT']
+  if (!target) return
+  await win.webContents.executeJavaScript(`(async () => {
+    window.dispatchEvent(new Event('focus'))
+    await new Promise((r) => setTimeout(r, 300))
+    document.querySelector('button[title="Hallo"]')?.click()
+    await new Promise((r) => setTimeout(r, 800))
+  })()`)
+  const image = await win.webContents.capturePage()
+  writeFileSync(target, image.toPNG())
+  console.log(`[smoke] screenshot ${target}`)
 }

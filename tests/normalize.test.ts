@@ -12,7 +12,7 @@ describe('normalizeSdkMessage', () => {
         tools: ['Read'],
         session_id: 'x',
       }),
-    ).toEqual([{ sessionId: 's', type: 'init', model: 'm', tools: ['Read'] }])
+    ).toEqual([{ chatId: 's', type: 'init', model: 'm', tools: ['Read'] }])
 
     expect(
       normalizeSdkMessage('s', {
@@ -20,7 +20,7 @@ describe('normalizeSdkMessage', () => {
         parent_tool_use_id: null,
         event: { type: 'content_block_delta', delta: { type: 'text_delta', text: 'Hi' } },
       }),
-    ).toEqual([{ sessionId: 's', type: 'text-delta', text: 'Hi' }])
+    ).toEqual([{ chatId: 's', type: 'text-delta', text: 'Hi' }])
 
     expect(
       normalizeSdkMessage('s', {
@@ -34,8 +34,8 @@ describe('normalizeSdkMessage', () => {
         },
       }),
     ).toEqual([
-      { sessionId: 's', type: 'assistant-text', text: 'Hello' },
-      { sessionId: 's', type: 'tool-use', toolUseId: 't1', name: 'Read', input: { path: 'a' } },
+      { chatId: 's', type: 'assistant-text', text: 'Hello' },
+      { chatId: 's', type: 'tool-use', toolUseId: 't1', name: 'Read', input: { path: 'a' } },
     ])
 
     expect(
@@ -48,7 +48,7 @@ describe('normalizeSdkMessage', () => {
         errors: ['boom'],
       }),
     ).toEqual([
-      { sessionId: 's', type: 'result', isError: true, text: 'boom', costUsd: 0, durationMs: 5 },
+      { chatId: 's', type: 'result', isError: true, text: 'boom', costUsd: 0, durationMs: 5 },
     ])
   })
 

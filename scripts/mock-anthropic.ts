@@ -16,9 +16,11 @@ export interface MockAnthropic {
 
 /**
  * Minimal Anthropic Messages API mock (the same surface OpenRouter and Ollama expose).
- * Every /v1/messages call answers with `replyText`, streamed or not.
+ * Every /v1/messages call answers with `reply` (or its result for the request body), streamed or not.
  */
-export async function startMockAnthropic(replyText: string): Promise<MockAnthropic> {
+export async function startMockAnthropic(
+  reply: string | ((body: unknown) => string),
+): Promise<MockAnthropic> {
   const requests: RecordedRequest[] = []
 
   const server: Server = createServer((req, res) => {
@@ -42,6 +44,7 @@ export async function startMockAnthropic(replyText: string): Promise<MockAnthrop
       if (req.method === 'POST' && path === '/v1/messages') {
         const model = (body as { model?: string } | undefined)?.model ?? 'mock-model'
         const stream = (body as { stream?: boolean } | undefined)?.stream === true
+        const replyText = typeof reply === 'string' ? reply : reply(body)
         const message = {
           id: `msg_${requests.length}`,
           type: 'message',

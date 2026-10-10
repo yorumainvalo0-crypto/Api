@@ -1,14 +1,16 @@
 import { z } from 'zod'
+import { AttachmentSchema } from './chat'
 
 export const ChatRequestSchema = z.object({
-  sessionId: z.string().min(1),
-  prompt: z.string().min(1),
-  /** Working directory for the agent. Defaults to the session workspace. */
+  chatId: z.string().min(1),
+  prompt: z.string(),
+  attachments: z.array(AttachmentSchema).default([]),
+  /** Working directory for the agent. Defaults to the chat workspace. */
   cwd: z.string().optional(),
 })
 export type ChatRequest = z.infer<typeof ChatRequestSchema>
 
-const base = { sessionId: z.string() }
+const base = { chatId: z.string() }
 
 /** Normalized events streamed from the main process to the renderer. */
 export const AgentEventSchema = z.discriminatedUnion('type', [

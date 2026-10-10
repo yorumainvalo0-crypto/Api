@@ -1,16 +1,21 @@
 import { mkdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { query, type Options } from '@anthropic-ai/claude-agent-sdk'
+import { query, type Options, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk'
 import type { AgentEvent, ChatRequest } from '@shared/schemas/agent'
+import type { Attachment } from '@shared/schemas/chat'
 import type { Settings } from '@shared/schemas/settings'
 import type { SecretStore } from '../storage/secret-store'
+import type { ChatRepository } from '../storage/chat-repository'
+import { buildPromptBlocks } from '../workspace/attachments'
+import { isInside } from '../workspace/paths'
 import { buildProviderRuntime } from './providers'
 import { normalizeSdkMessage, type SdkMessageLike } from './normalize'
 
 export interface SessionManagerDeps {
   getSettings: () => Settings
   secrets: SecretStore
-  /** Root directory for per-session workspaces and the isolated agent config. */
+  chats: ChatRepository
+  /** Root directory for per-chat workspaces and the isolated agent config. */
   dataDir: string
   appVersion: string
   executablePath: string
@@ -21,32 +26,74 @@ interface ActiveRun {
   abort: AbortController
 }
 
-/** Runs Claude Agent SDK queries per chat session and streams normalized events. */
+/** Collects streamed output into the assistant message that gets persisted. */
+class AssistantDraft {
+  text = ''
+  streamed = false
+  tools: string[] = []
+  error: string | null = null
+  costUsd: number | null = null
+  durationMs: number | null = null
+
+  apply(event: AgentEvent): void {
+    switch (event.type) {
+      case 'text-delta':
+        this.streamed = true
+        this.text += event.text
+        break
+      case 'assistant-text':
+        if (!this.streamed) this.text = this.text ? `${this.text}\n\n${event.text}` : event.text
+        break
+      case 'tool-use':
+        this.tools.push(event.name)
+        break
+      case 'result':
+        this.costUsd = event.costUsd
+        this.durationMs = event.durationMs
+        if (event.isError) this.error = event.text || 'Unbekannter Fehler'
+        break
+      case 'error':
+        this.error = event.message
+        break
+      default:
+        break
+    }
+  }
+}
+
+export function chatWorkspace(dataDir: string, chatId: string): string {
+  return join(dataDir, 'chats', chatId)
+}
+
+export function chatAttachmentsDir(dataDir: string, chatId: string): string {
+  return join(chatWorkspace(dataDir, chatId), 'attachments')
+}
+
+/** Runs Claude Agent SDK queries per chat and streams normalized events. */
 export class SessionManager {
   private readonly active = new Map<string, ActiveRun>()
-  /** Maps our chat session id to the SDK session id so follow-ups resume the conversation. */
-  private readonly sdkSessions = new Map<string, string>()
 
   constructor(private readonly deps: SessionManagerDeps) {}
 
-  isRunning(sessionId: string): boolean {
-    return this.active.has(sessionId)
+  isRunning(chatId: string): boolean {
+    return this.active.has(chatId)
   }
 
-  /** Starts a run in the background. Returns false if the session is already busy. */
+  /** Starts a run in the background. Returns false if the chat is already busy. */
   send(request: ChatRequest): boolean {
-    if (this.active.has(request.sessionId)) return false
+    if (this.active.has(request.chatId)) return false
+    if (!request.prompt.trim() && request.attachments.length === 0) return false
     const run: ActiveRun = { abort: new AbortController() }
-    this.active.set(request.sessionId, run)
+    this.active.set(request.chatId, run)
     void this.execute(request, run).finally(() => {
-      this.active.delete(request.sessionId)
-      this.deps.emit({ sessionId: request.sessionId, type: 'done' })
+      this.active.delete(request.chatId)
+      this.deps.emit({ chatId: request.chatId, type: 'done' })
     })
     return true
   }
 
-  cancel(sessionId: string): boolean {
-    const run = this.active.get(sessionId)
+  cancel(chatId: string): boolean {
+    const run = this.active.get(chatId)
     if (!run) return false
     run.abort.abort()
     return true
@@ -57,24 +104,47 @@ export class SessionManager {
   }
 
   private async execute(request: ChatRequest, run: ActiveRun): Promise<void> {
-    const { sessionId } = request
-    const { emit } = this.deps
+    const { chatId } = request
+    const { chats, dataDir } = this.deps
+    const draft = new AssistantDraft()
+    const emit = (event: AgentEvent): void => {
+      draft.apply(event)
+      this.deps.emit(event)
+    }
+
     try {
       const settings = this.deps.getSettings()
       const provider = settings.activeProvider
+      const modelLabel = settings.models[provider] || 'Standard'
+
+      // Only accept attachments that were stored in this chat's folder by the main process.
+      const attachmentsDir = chatAttachmentsDir(dataDir, chatId)
+      const attachments: Attachment[] = request.attachments.filter((a) =>
+        isInside(attachmentsDir, a.path),
+      )
+
+      if (!chats.exists(chatId)) {
+        const title =
+          request.prompt.trim().split('\n')[0]?.slice(0, 60) || attachments[0]?.name || 'Neuer Chat'
+        chats.create({ id: chatId, title, provider, model: modelLabel })
+      } else {
+        chats.setModel(chatId, provider, modelLabel)
+      }
+      chats.addMessage({ chatId, role: 'user', text: request.prompt, attachments })
+
       const runtime = buildProviderRuntime({
         provider,
         settings,
         secret: this.deps.secrets.get(provider),
         baseEnv: process.env,
-        configDir: join(this.deps.dataDir, 'agent-config'),
+        configDir: join(dataDir, 'agent-config'),
         appVersion: this.deps.appVersion,
       })
 
-      const cwd = request.cwd ?? join(this.deps.dataDir, 'sessions', sessionId)
+      const cwd = request.cwd ?? chatWorkspace(dataDir, chatId)
       mkdirSync(cwd, { recursive: true })
 
-      const resume = this.sdkSessions.get(sessionId)
+      const resume = chats.getSdkSessionId(chatId)
       const options: Options = {
         cwd,
         env: runtime.env,
@@ -89,19 +159,42 @@ export class SessionManager {
         ...(resume ? { resume } : {}),
       }
 
-      for await (const message of query({ prompt: request.prompt, options })) {
-        if (message.type === 'system' && message.subtype === 'init') {
-          this.sdkSessions.set(sessionId, message.session_id)
+      const blocks = buildPromptBlocks(request.prompt, attachments, { pdf: provider !== 'ollama' })
+      const prompt = (async function* (): AsyncGenerator<SDKUserMessage> {
+        yield {
+          type: 'user',
+          message: { role: 'user', content: blocks },
+          parent_tool_use_id: null,
         }
-        for (const event of normalizeSdkMessage(sessionId, message as SdkMessageLike)) emit(event)
+      })()
+
+      for await (const message of query({ prompt, options })) {
+        if (message.type === 'system' && message.subtype === 'init') {
+          chats.setSdkSessionId(chatId, message.session_id)
+        }
+        for (const event of normalizeSdkMessage(chatId, message as SdkMessageLike)) emit(event)
       }
     } catch (error) {
-      if (run.abort.signal.aborted) return
-      emit({
-        sessionId,
-        type: 'error',
-        message: error instanceof Error ? error.message : String(error),
-      })
+      if (!run.abort.signal.aborted) {
+        emit({
+          chatId,
+          type: 'error',
+          message: error instanceof Error ? error.message : String(error),
+        })
+      }
+    } finally {
+      if (run.abort.signal.aborted && !draft.error) draft.error = 'Abgebrochen.'
+      if (chats.exists(chatId)) {
+        chats.addMessage({
+          chatId,
+          role: 'assistant',
+          text: draft.text,
+          tools: draft.tools,
+          error: draft.error,
+          costUsd: draft.costUsd,
+          durationMs: draft.durationMs,
+        })
+      }
     }
   }
 }

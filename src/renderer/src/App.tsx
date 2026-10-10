@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { MessageSquare, Settings as SettingsIcon } from 'lucide-react'
 import type { Settings } from '@shared/schemas/settings'
+import type { ChatSummary } from '@shared/schemas/chat'
 import { api } from './lib/api'
 import { ChatView } from './features/chat/ChatView'
+import { ChatSidebar } from './features/chat/ChatSidebar'
 import { SettingsView } from './features/settings/SettingsView'
 
 type View = 'chat' | 'settings'
@@ -10,16 +12,40 @@ type View = 'chat' | 'settings'
 export function App() {
   const [view, setView] = useState<View>('chat')
   const [settings, setSettings] = useState<Settings | null>(null)
+  const [chats, setChats] = useState<ChatSummary[]>([])
+  const [activeChatId, setActiveChatId] = useState<string>(() => crypto.randomUUID())
+  const [running, setRunning] = useState<ReadonlySet<string>>(new Set())
+
+  const refreshChats = useCallback(() => {
+    void api.invoke('chats:list').then(setChats)
+  }, [])
 
   useEffect(() => {
     void api.invoke('settings:get').then(setSettings)
-  }, [])
+    refreshChats()
+  }, [refreshChats])
+
+  // Track which chats have a run in progress, independent of the visible chat,
+  // and refresh the chat list when a chat is created (init) or finished (done).
+  useEffect(() => {
+    return api.on('agent:event', (event) => {
+      if (event.type === 'init' || event.type === 'done') refreshChats()
+      setRunning((prev) => {
+        const busy = event.type !== 'done'
+        if (prev.has(event.chatId) === busy) return prev
+        const next = new Set(prev)
+        if (busy) next.add(event.chatId)
+        else next.delete(event.chatId)
+        return next
+      })
+    })
+  }, [refreshChats])
 
   useTheme(settings?.theme ?? 'system')
 
   return (
     <div className="flex h-full">
-      <nav className="flex w-14 flex-col items-center gap-2 border-r border-zinc-200 bg-zinc-50 py-3 dark:border-zinc-800 dark:bg-zinc-900">
+      <nav className="flex w-14 shrink-0 flex-col items-center gap-2 border-r border-zinc-200 bg-zinc-50 py-3 dark:border-zinc-800 dark:bg-zinc-900">
         <NavButton label="Chat" active={view === 'chat'} onClick={() => setView('chat')}>
           <MessageSquare size={20} />
         </NavButton>
@@ -31,9 +57,24 @@ export function App() {
           <SettingsIcon size={20} />
         </NavButton>
       </nav>
-      <main className="min-w-0 flex-1">
+      <main className="flex min-w-0 flex-1">
         {settings === null ? null : view === 'chat' ? (
-          <ChatView settings={settings} />
+          <>
+            <ChatSidebar
+              chats={chats}
+              activeId={activeChatId}
+              onSelect={setActiveChatId}
+              onNew={() => setActiveChatId(crypto.randomUUID())}
+              onChanged={refreshChats}
+            />
+            <ChatView
+              key={activeChatId}
+              chatId={activeChatId}
+              settings={settings}
+              running={running.has(activeChatId)}
+              onSettingsChange={setSettings}
+            />
+          </>
         ) : (
           <SettingsView settings={settings} onChange={setSettings} />
         )}

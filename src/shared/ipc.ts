@@ -6,6 +6,15 @@ import {
   SettingsSchema,
 } from './schemas/settings'
 import { AgentEventSchema, ChatRequestSchema } from './schemas/agent'
+import {
+  AttachmentInputSchema,
+  AttachmentSchema,
+  ChatDetailSchema,
+  ChatSummarySchema,
+} from './schemas/chat'
+import { ConnectionTestResultSchema, ModelInfoSchema } from './schemas/models'
+
+const ChatIdInput = z.object({ chatId: z.string().min(1) })
 
 /**
  * Single source of truth for renderer -> main request/response calls.
@@ -14,7 +23,12 @@ import { AgentEventSchema, ChatRequestSchema } from './schemas/agent'
 export const ipcContract = {
   'app:info': {
     input: z.void(),
-    output: z.object({ version: z.string(), platform: z.string(), agentSdkVersion: z.string() }),
+    output: z.object({
+      version: z.string(),
+      platform: z.string(),
+      agentSdkVersion: z.string(),
+      dataDir: z.string(),
+    }),
   },
   'settings:get': { input: z.void(), output: SettingsSchema },
   'settings:update': { input: SettingsPatchSchema, output: SettingsSchema },
@@ -24,11 +38,28 @@ export const ipcContract = {
     output: SecretStatusSchema,
   },
   'secrets:clear': { input: z.object({ provider: ProviderIdSchema }), output: SecretStatusSchema },
-  'agent:send': { input: ChatRequestSchema, output: z.object({ accepted: z.boolean() }) },
-  'agent:cancel': {
-    input: z.object({ sessionId: z.string() }),
+  'models:list': {
+    input: z.object({ provider: ProviderIdSchema }),
+    output: z.array(ModelInfoSchema),
+  },
+  'models:test': {
+    input: z.object({ provider: ProviderIdSchema }),
+    output: ConnectionTestResultSchema,
+  },
+  'chats:list': { input: z.void(), output: z.array(ChatSummarySchema) },
+  'chats:get': { input: ChatIdInput, output: ChatDetailSchema.nullable() },
+  'chats:rename': {
+    input: ChatIdInput.extend({ title: z.string().trim().min(1).max(200) }),
     output: z.object({ ok: z.boolean() }),
   },
+  'chats:delete': { input: ChatIdInput, output: z.object({ ok: z.boolean() }) },
+  'attachments:add': {
+    input: ChatIdInput.extend({ files: z.array(AttachmentInputSchema).min(1).max(20) }),
+    output: z.object({ attachments: z.array(AttachmentSchema), errors: z.array(z.string()) }),
+  },
+  'dialog:open-files': { input: z.void(), output: z.array(z.string()) },
+  'agent:send': { input: ChatRequestSchema, output: z.object({ accepted: z.boolean() }) },
+  'agent:cancel': { input: ChatIdInput, output: z.object({ ok: z.boolean() }) },
 } as const
 
 export type IpcContract = typeof ipcContract
@@ -48,9 +79,18 @@ export type IpcEventPayload<E extends IpcEventName> = z.infer<(typeof ipcEvents)
 export interface WorkbenchApi {
   invoke<C extends IpcChannel>(channel: C, ...args: InvokeArgs<C>): Promise<IpcOutput<C>>
   on<E extends IpcEventName>(event: E, listener: (payload: IpcEventPayload<E>) => void): () => void
+  /** Absolute path of a dropped/picked File (empty for in-memory data such as pasted images). */
+  getPathForFile(file: File): string
 }
 
 // eslint-disable-next-line @typescript-eslint/no-invalid-void-type -- channels without input use z.void()
 type InvokeArgs<C extends IpcChannel> = IpcInput<C> extends void ? [] : [input: IpcInput<C>]
 
 export { IPC_EVENT_PREFIX, IPC_INVOKE_PREFIX } from './ipc-channels'
+
+/** Custom protocol that serves files from the app data directory to the renderer. */
+export const FILE_PROTOCOL = 'aiw-file'
+
+export function fileUrl(absolutePath: string): string {
+  return `${FILE_PROTOCOL}://local/${encodeURIComponent(absolutePath)}`
+}
