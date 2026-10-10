@@ -36,6 +36,13 @@ export const SettingsSchema = z.object({
   comfyImageWorkflow: z.string().default(''),
   /** Long image side for the built-in workflow (512 for SD 1.5, 1024 for SDXL/Flux). */
   comfyResolution: z.number().int().min(256).max(2048).default(1024),
+  /** Local handwriting/document OCR through an Ollama vision model. */
+  ocrEnabled: z.boolean().default(false),
+  ocrModel: z.string().default('qwen3-vl:8b-instruct'),
+  /** Ollama address for OCR; empty = same as the chat Ollama address. */
+  ocrBaseUrl: z.string().default(''),
+  /** Seconds the OCR model stays on the GPU after use (0 = unload immediately). */
+  ocrKeepAliveSec: z.number().int().min(0).max(3600).default(60),
 })
 export type Settings = z.infer<typeof SettingsSchema>
 
@@ -62,6 +69,10 @@ export const SettingsPatchSchema = z
     comfyCheckpoint: z.string(),
     comfyImageWorkflow: z.string(),
     comfyResolution: z.number().int().min(256).max(2048),
+    ocrEnabled: z.boolean(),
+    ocrModel: z.string().min(1),
+    ocrBaseUrl: z.union([z.literal(''), z.url()]),
+    ocrKeepAliveSec: z.number().int().min(0).max(3600),
   })
   .partial()
 export type SettingsPatch = z.infer<typeof SettingsPatchSchema>

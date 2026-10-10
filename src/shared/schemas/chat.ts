@@ -1,7 +1,8 @@
 import { z } from 'zod'
 import { ProviderIdSchema } from './settings'
 
-export const AttachmentKindSchema = z.enum(['image', 'pdf', 'text', 'model3d', 'file'])
+/** `document` = office files (Word, Excel, PowerPoint, OpenOffice, RTF), converted to text. */
+export const AttachmentKindSchema = z.enum(['image', 'pdf', 'text', 'model3d', 'document', 'file'])
 export type AttachmentKind = z.infer<typeof AttachmentKindSchema>
 
 /** A file stored in the chat workspace and referenced by messages. */

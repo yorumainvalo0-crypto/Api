@@ -8,6 +8,7 @@ import {
   FolderOpen,
   Image as ImageIcon,
   Box,
+  FileSpreadsheet,
   Loader2,
 } from 'lucide-react'
 import type { AttachmentKind } from '@shared/schemas/chat'
@@ -27,6 +28,8 @@ export interface PreviewFile {
 }
 
 // pdf.js is large, so the viewer is only loaded when a PDF is actually shown.
+import { OcrButton, OcrResult, useOcr } from './OcrPanel'
+import { DocumentPreview } from './DocumentPreview'
 const PdfViewer = lazy(() => import('./PdfViewer').then((m) => ({ default: m.PdfViewer })))
 
 /** Text files are only shown up to this size. */
@@ -36,6 +39,7 @@ const KIND_ICONS: Record<PreviewKind, typeof File> = {
   image: ImageIcon,
   model3d: Box,
   pdf: FileText,
+  document: FileSpreadsheet,
   text: FileCode,
   file: File,
 }
@@ -53,6 +57,7 @@ export function PreviewKindIcon(props: { file: PreviewFile; size?: number; class
 export function FilePreview(props: { file: PreviewFile; toolbarExtra?: ReactNode }) {
   const { file } = props
   const kind = previewKind(file)
+  const ocr = useOcr(file.path)
 
   return (
     <div className="flex h-full min-h-0 w-full flex-col">
@@ -61,6 +66,7 @@ export function FilePreview(props: { file: PreviewFile; toolbarExtra?: ReactNode
         <span className="min-w-0 flex-1 truncate text-sm font-medium" title={file.path}>
           {file.name}
         </span>
+        {kind === 'image' && <OcrButton busy={ocr.busy} onClick={() => void ocr.run()} />}
         <FileActions path={file.path} />
         {props.toolbarExtra}
       </div>
@@ -89,10 +95,12 @@ export function FilePreview(props: { file: PreviewFile; toolbarExtra?: ReactNode
             </Suspense>
           </RenderErrorBoundary>
         )}
+        {kind === 'document' && <DocumentPreview key={file.path} path={file.path} />}
         {kind === 'file' && (
           <NoPreview file={file} text="Für diesen Dateityp gibt es keine Vorschau." />
         )}
       </div>
+      <OcrResult text={ocr.text} error={ocr.error} onClose={ocr.reset} />
     </div>
   )
 }

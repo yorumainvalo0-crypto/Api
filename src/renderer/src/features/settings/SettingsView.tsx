@@ -10,6 +10,8 @@ import type { IpcOutput } from '@shared/ipc'
 import { api } from '../../lib/api'
 import { ModelPicker, cleanError } from '../../components/ModelPicker'
 import { ImageGenerationSection } from './ImageGenerationSection'
+import { LocalServicesSection } from './LocalServicesSection'
+import { OcrSection } from './OcrSection'
 
 const PROVIDERS = ProviderIdSchema.options
 
@@ -85,7 +87,11 @@ export function SettingsView(props: { settings: Settings; onChange: (s: Settings
           </p>
         </section>
 
+        <LocalServicesSection settings={settings} update={update} />
+
         <ImageGenerationSection settings={settings} update={update} />
+
+        <OcrSection settings={settings} update={update} />
 
         <section className="space-y-2">
           <h2 className="font-medium">Kostenlimit</h2>

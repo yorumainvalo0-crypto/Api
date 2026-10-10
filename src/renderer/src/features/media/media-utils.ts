@@ -6,7 +6,21 @@
 export type ModelLoaderKind = 'gltf' | 'obj' | 'stl' | 'ply'
 
 /** Coarse preview category, derived from kind/mime type/extension. */
-export type PreviewKind = 'image' | 'model3d' | 'pdf' | 'text' | 'file'
+export type PreviewKind = 'image' | 'model3d' | 'pdf' | 'document' | 'text' | 'file'
+
+/** Office formats shown as converted text/tables (Word, Excel, PowerPoint, OpenOffice, RTF). */
+export const DOCUMENT_EXTENSIONS: ReadonlySet<string> = new Set([
+  'docx',
+  'doc',
+  'odt',
+  'rtf',
+  'xlsx',
+  'xlsm',
+  'xls',
+  'ods',
+  'pptx',
+  'odp',
+])
 
 const MODEL_LOADERS: Record<string, ModelLoaderKind> = {
   glb: 'gltf',
@@ -119,6 +133,7 @@ export function previewKind(file: { name: string; kind: string; mimeType: string
   }
   if (file.kind === 'model3d' || MODEL_LOADERS[ext]) return 'model3d'
   if (file.kind === 'pdf' || file.mimeType === 'application/pdf' || ext === 'pdf') return 'pdf'
+  if (file.kind === 'document' || DOCUMENT_EXTENSIONS.has(ext)) return 'document'
   if (file.kind === 'text' || file.mimeType.startsWith('text/') || TEXT_EXTENSIONS.has(ext)) {
     return 'text'
   }

@@ -60,6 +60,36 @@ export const ipcContract = {
     input: z.object({ id: z.string() }),
     output: z.object({ ok: z.boolean() }),
   },
+  /** Finds running Ollama/ComfyUI servers on this PC (also when started from Pinokio). */
+  'local:discover': {
+    input: z.void(),
+    output: z.object({
+      ollama: z.array(z.object({ url: z.string(), version: z.string() })),
+      comfy: z.array(z.object({ url: z.string(), version: z.string() })),
+    }),
+  },
+  'ocr:status': {
+    input: z.void(),
+    output: z.object({
+      reachable: z.boolean(),
+      version: z.string().nullable(),
+      installed: z.boolean(),
+      message: z.string(),
+      baseUrl: z.string(),
+      model: z.string(),
+    }),
+  },
+  /** Starts downloading the OCR model; progress arrives as 'ocr:progress' events. */
+  'ocr:download': { input: z.void(), output: z.object({ started: z.boolean() }) },
+  'ocr:remove': { input: z.void(), output: z.object({ ok: z.boolean() }) },
+  /** Transcribes an image locally (handwriting or document layout). */
+  'ocr:recognize': {
+    input: z.object({
+      path: z.string().min(1),
+      mode: z.enum(['handwriting', 'document']).optional(),
+    }),
+    output: z.object({ text: z.string() }),
+  },
   'settings:update': { input: SettingsPatchSchema, output: SettingsSchema },
   'secrets:status': { input: z.void(), output: SecretStatusSchema },
   'secrets:set': {
@@ -104,6 +134,16 @@ export const ipcContract = {
   'dialog:open-files': { input: z.void(), output: z.array(z.string()) },
   /** Files the agent produced in a chat (images, 3D models, documents), newest first. */
   'outputs:list': { input: ChatIdInput, output: z.array(OutputFileSchema) },
+  /** Office document converted to Markdown for the in-app preview. */
+  'documents:preview': {
+    input: z.object({ path: z.string().min(1) }),
+    output: z.object({
+      kind: z.string(),
+      summary: z.string(),
+      markdown: z.string(),
+      truncated: z.boolean(),
+    }),
+  },
   'files:save-as': {
     input: z.object({ path: z.string().min(1) }),
     output: z.object({ savedTo: z.string().nullable() }),
@@ -139,6 +179,13 @@ export type IpcOutput<C extends IpcChannel> = z.infer<IpcContract[C]['output']>
 /** Main -> renderer push events. */
 export const ipcEvents = {
   'agent:event': AgentEventSchema,
+  'ocr:progress': z.object({
+    status: z.string(),
+    completed: z.number(),
+    total: z.number(),
+    done: z.boolean(),
+    error: z.string().nullable(),
+  }),
   ...projectEvents,
 } as const
 

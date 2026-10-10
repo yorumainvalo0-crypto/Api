@@ -13,6 +13,9 @@ import { createProjectHandlers } from './project/handlers'
 import { AddonStore } from './addons/addon-store'
 import { createAddonHandlers } from './addons/handlers'
 import { ComfyClient } from './media/comfy-client'
+import { discoverLocalServices } from './media/discovery'
+import { OllamaVision } from './media/ocr'
+import { classify, detectMime } from './workspace/attachments'
 import { ComfyWorkflowStore } from './media/comfy-workflows'
 import { isAllowedPath, isExecutable, listOutputs, outputsDir } from './media/outputs'
 import { ChatRepository } from './storage/chat-repository'
@@ -124,6 +127,7 @@ function bootstrap(): void {
   })
 
   const comfyWorkflows = new ComfyWorkflowStore(join(dataDir, 'comfy'))
+  let ocrDownload: AbortController | undefined
 
   const sessions = new SessionManager({
     comfyWorkflows,
@@ -149,6 +153,66 @@ function bootstrap(): void {
     }),
     'settings:get': () => settings.get(),
     'updates:check': () => checkForUpdates(),
+    'local:discover': () => discoverLocalServices(),
+    'ocr:status': async () => {
+      const { ocrModel, ocrBaseUrl, ollamaBaseUrl } = settings.get()
+      const baseUrl = ocrBaseUrl || ollamaBaseUrl
+      const status = await new OllamaVision({ baseUrl }).status(ocrModel)
+      return { ...status, baseUrl, model: ocrModel }
+    },
+    'ocr:download': () => {
+      if (ocrDownload) return { started: false }
+      const { ocrModel, ocrBaseUrl, ollamaBaseUrl } = settings.get()
+      const controller = new AbortController()
+      ocrDownload = controller
+      const emit = (p: {
+        status: string
+        completed: number
+        total: number
+        done: boolean
+        error: string | null
+      }) => {
+        if (mainWindow) sendEvent(mainWindow.webContents, 'ocr:progress', p)
+      }
+      void new OllamaVision({ baseUrl: ocrBaseUrl || ollamaBaseUrl })
+        .pull(ocrModel, (p) => emit({ ...p, done: false, error: null }), controller.signal)
+        .then(() => {
+          settings.update({ ocrEnabled: true })
+          emit({ status: 'success', completed: 1, total: 1, done: true, error: null })
+        })
+        .catch((error: unknown) =>
+          emit({
+            status: 'error',
+            completed: 0,
+            total: 0,
+            done: true,
+            error: error instanceof Error ? error.message : String(error),
+          }),
+        )
+        .finally(() => {
+          ocrDownload = undefined
+        })
+      return { started: true }
+    },
+    'ocr:remove': async () => {
+      const { ocrModel, ocrBaseUrl, ollamaBaseUrl } = settings.get()
+      await new OllamaVision({ baseUrl: ocrBaseUrl || ollamaBaseUrl }).remove(ocrModel)
+      settings.update({ ocrEnabled: false })
+      return { ok: true }
+    },
+    'ocr:recognize': async ({ path, mode }) => {
+      assertAllowed(path)
+      if (classify(path, detectMime(path)) !== 'image')
+        throw new Error('Nur Bilder können erkannt werden.')
+      const { ocrModel, ocrBaseUrl, ollamaBaseUrl, ocrKeepAliveSec } = settings.get()
+      const text = await new OllamaVision({ baseUrl: ocrBaseUrl || ollamaBaseUrl }).recognize({
+        model: ocrModel,
+        image: readFileSync(path),
+        mode: mode ?? 'handwriting',
+        keepAliveSec: ocrKeepAliveSec,
+      })
+      return { text }
+    },
     'comfy:status': async () => {
       const client = new ComfyClient({ baseUrl: settings.get().comfyUrl })
       try {
@@ -287,6 +351,9 @@ function bootstrap(): void {
     'outputs:list': ({ chatId }) => {
       const chat = chats.summary(chatId)
       return chat ? listOutputs(outputsDir(dataDir, chat)) : []
+    },
+    'documents:preview': () => {
+      throw new Error('Die Office-Vorschau ist noch nicht verfügbar.')
     },
     'files:save-as': async ({ path }) => {
       assertAllowed(path)

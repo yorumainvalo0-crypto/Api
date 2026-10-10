@@ -12,7 +12,22 @@ export class AttachmentError extends Error {
   override name = 'AttachmentError'
 }
 
+/** Office formats the app converts to text for the model (see src/main/documents). */
+const OFFICE_MIME: Record<string, string> = {
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.doc': 'application/msword',
+  '.odt': 'application/vnd.oasis.opendocument.text',
+  '.rtf': 'application/rtf',
+  '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  '.xlsm': 'application/vnd.ms-excel.sheet.macroEnabled.12',
+  '.xls': 'application/vnd.ms-excel',
+  '.ods': 'application/vnd.oasis.opendocument.spreadsheet',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.odp': 'application/vnd.oasis.opendocument.presentation',
+}
+
 const MIME_BY_EXT: Record<string, string> = {
+  ...OFFICE_MIME,
   '.png': 'image/png',
   '.jpg': 'image/jpeg',
   '.jpeg': 'image/jpeg',
@@ -110,6 +125,12 @@ export function classify(fileName: string, mimeType: string): AttachmentKind {
   if (MODEL_IMAGE_TYPES.has(mimeType)) return 'image'
   if (mimeType === 'application/pdf') return 'pdf'
   if (mimeType.startsWith('model/')) return 'model3d'
+  if (
+    Object.values(OFFICE_MIME).includes(mimeType) ||
+    extname(fileName).toLowerCase() in OFFICE_MIME
+  ) {
+    return 'document'
+  }
   if (mimeType.startsWith('text/') || mimeType === 'application/json' || isTextFile(fileName)) {
     return 'text'
   }

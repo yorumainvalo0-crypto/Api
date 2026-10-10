@@ -24,6 +24,7 @@ import { outputsDir } from '../media/outputs'
 import type { AgentAddonConfig } from '../addons/addon-store'
 import type { ComfyConfig } from '../media/comfy-generate'
 import type { ComfyWorkflowStore } from '../media/comfy-workflows'
+import { OllamaVision } from '../media/ocr'
 
 export interface SessionManagerDeps {
   getSettings: () => Settings
@@ -44,6 +45,8 @@ export interface SessionManagerDeps {
   comfyWorkflows?: ComfyWorkflowStore
   /** fetch used for ComfyUI (tests inject a fake server). */
   comfyFetch?: typeof fetch
+  /** fetch used for local OCR via Ollama (tests inject a fake server). */
+  ocrFetch?: typeof fetch
 }
 
 interface ActiveRun {
@@ -227,6 +230,18 @@ export class SessionManager {
               }
         },
         ...(comfyConfig ? { getComfyConfig: comfyConfig } : {}),
+        ...(settings.ocrEnabled
+          ? {
+              ocr: {
+                vision: new OllamaVision({
+                  baseUrl: settings.ocrBaseUrl || settings.ollamaBaseUrl,
+                  ...(this.deps.ocrFetch ? { fetchImpl: this.deps.ocrFetch } : {}),
+                }),
+                model: settings.ocrModel,
+                keepAliveSec: settings.ocrKeepAliveSec,
+              },
+            }
+          : {}),
         onFile: (file) => emit({ chatId, type: 'output-file', file }),
         ...(this.deps.mediaFetch ? { fetchImpl: this.deps.mediaFetch } : {}),
       })

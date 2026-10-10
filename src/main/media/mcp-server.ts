@@ -12,12 +12,14 @@ import {
   type ComfyConfig,
   type ComfyInputImage,
 } from './comfy-generate'
+import type { OllamaVision } from './ocr'
 
 export const MEDIA_MCP_SERVER = 'media'
 export const MEDIA_TOOL_NAMES = [
   `mcp__${MEDIA_MCP_SERVER}__generate_image`,
   `mcp__${MEDIA_MCP_SERVER}__save_file`,
   `mcp__${MEDIA_MCP_SERVER}__generate_3d_model`,
+  `mcp__${MEDIA_MCP_SERVER}__read_handwriting`,
 ]
 
 export type ImageBackendConfig =
@@ -47,6 +49,8 @@ export interface MediaServerOptions {
   getImageConfig: () => ImageBackendConfig
   /** Local ComfyUI setup used by generate_3d_model (only offered when 3D workflows exist). */
   getComfyConfig?: () => ComfyConfig
+  /** Local OCR (Ollama vision model); read_handwriting is only offered when set. */
+  ocr?: { vision: OllamaVision; model: string; keepAliveSec: number }
   /** Called for every file written, so the UI can show it inline. */
   onFile: (file: OutputFile) => void
   fetchImpl?: typeof fetch
@@ -148,6 +152,47 @@ export function createMediaMcpServer(options: MediaServerOptions) {
         ]
       : []
 
+  const ocr = options.ocr
+  const toolOcr = ocr
+    ? [
+        tool(
+          'read_handwriting',
+          "Reads handwriting or printed text from an image LOCALLY on the user's GPU (no cloud) and " +
+            'returns the transcription. Use it for handwritten notes, scans and photos of documents, ' +
+            'especially when privacy matters or the current model cannot see images.',
+          {
+            image_path: z
+              .string()
+              .describe('Absolute path of the image (attachment or project file)'),
+            mode: z
+              .enum(['handwriting', 'document'])
+              .optional()
+              .describe('handwriting = exact lines; document = Markdown with headings/tables'),
+            hint: z
+              .string()
+              .optional()
+              .describe('Optional context, e.g. language or expected content'),
+          },
+          async ({ image_path, mode, hint }) => {
+            try {
+              const image = readInputImage(image_path, options.readableRoots)
+              const text = await ocr.vision.recognize({
+                model: ocr.model,
+                image: image.data,
+                mode: mode ?? 'handwriting',
+                keepAliveSec: ocr.keepAliveSec,
+                hint,
+              })
+              return textResult(text || '[Kein Text erkannt]')
+            } catch (error) {
+              return textResult(error instanceof Error ? error.message : String(error), true)
+            }
+          },
+          { annotations: { readOnlyHint: true } },
+        ),
+      ]
+    : []
+
   return createSdkMcpServer({
     name: MEDIA_MCP_SERVER,
     version: '1.0.0',
@@ -242,6 +287,7 @@ export function createMediaMcpServer(options: MediaServerOptions) {
         },
       ),
       ...tool3d,
+      ...toolOcr,
     ],
   })
 }
