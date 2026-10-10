@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import {
   ProviderIdSchema,
+  SecretIdSchema,
   SecretStatusSchema,
   SettingsPatchSchema,
   SettingsSchema,
@@ -94,10 +95,14 @@ export const ipcContract = {
   'settings:update': { input: SettingsPatchSchema, output: SettingsSchema },
   'secrets:status': { input: z.void(), output: SecretStatusSchema },
   'secrets:set': {
-    input: z.object({ provider: ProviderIdSchema, value: z.string() }),
+    input: z.object({ provider: SecretIdSchema, value: z.string() }),
     output: SecretStatusSchema,
   },
-  'secrets:clear': { input: z.object({ provider: ProviderIdSchema }), output: SecretStatusSchema },
+  'secrets:clear': { input: z.object({ provider: SecretIdSchema }), output: SecretStatusSchema },
+  'jev:test': {
+    input: z.void(),
+    output: z.object({ ok: z.boolean(), message: z.string() }),
+  },
   'models:list': {
     input: z.object({ provider: ProviderIdSchema }),
     output: z.array(ModelInfoSchema),

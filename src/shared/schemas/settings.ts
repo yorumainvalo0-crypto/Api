@@ -3,6 +3,14 @@ import { z } from 'zod'
 export const ProviderIdSchema = z.enum(['anthropic', 'openrouter', 'ollama'])
 export type ProviderId = z.infer<typeof ProviderIdSchema>
 
+/** Everything a key can be stored for: the chat providers plus TypeSafe (Jev). */
+export const SecretIdSchema = z.enum([...ProviderIdSchema.options, 'typesafe'])
+export type SecretId = z.infer<typeof SecretIdSchema>
+
+/** Where the Jev decision model is called: TypeSafe directly or through OpenRouter. */
+export const JevSourceSchema = z.enum(['typesafe', 'openrouter'])
+export type JevSource = z.infer<typeof JevSourceSchema>
+
 export const PROVIDER_LABELS: Record<ProviderId, string> = {
   anthropic: 'Anthropic',
   openrouter: 'OpenRouter',
@@ -45,6 +53,11 @@ export const SettingsSchema = z.object({
   ocrBaseUrl: z.string().default(''),
   /** Seconds the OCR model stays on the GPU after use (0 = unload immediately). */
   ocrKeepAliveSec: z.number().int().min(0).max(3600).default(60),
+  /** Offer the Jev decision model (TypeSafe) as a tool to every chat model when a key exists. */
+  jevEnabled: z.boolean().default(true),
+  jevSource: JevSourceSchema.default('typesafe'),
+  /** Jev model id; empty = latest for the chosen source. */
+  jevModel: z.string().default(''),
   /** Version of the stored file, for one-time migrations of old defaults. */
   settingsVersion: z.number().int().default(SETTINGS_VERSION),
 })
@@ -77,6 +90,9 @@ export const SettingsPatchSchema = z
     ocrModel: z.string().min(1),
     ocrBaseUrl: z.union([z.literal(''), z.url()]),
     ocrKeepAliveSec: z.number().int().min(0).max(3600),
+    jevEnabled: z.boolean(),
+    jevSource: JevSourceSchema,
+    jevModel: z.string().max(200),
   })
   .partial()
 export type SettingsPatch = z.infer<typeof SettingsPatchSchema>
@@ -86,6 +102,7 @@ export const SecretStatusSchema = z.object({
   anthropic: z.boolean(),
   openrouter: z.boolean(),
   ollama: z.boolean(),
+  typesafe: z.boolean(),
   encryptionAvailable: z.boolean(),
 })
 export type SecretStatus = z.infer<typeof SecretStatusSchema>

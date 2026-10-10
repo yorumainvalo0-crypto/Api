@@ -23,6 +23,7 @@ import { chatToMarkdown, exportFileName } from './storage/chat-export'
 import { openDatabase } from './storage/database'
 import { SecretStore } from './storage/secret-store'
 import { UsageRepository } from './storage/usage-repository'
+import { jevClientFromSettings } from './jev/config'
 import { SettingsStore } from './storage/settings-store'
 import { storeAttachment } from './workspace/attachments'
 import { handleFileProtocol, registerFileProtocolScheme } from './workspace/file-protocol'
@@ -259,6 +260,21 @@ function bootstrap(): void {
     },
     'settings:update': (patch) => settings.update(patch),
     'secrets:status': () => secrets.status(),
+    'jev:test': async () => {
+      const setup = jevClientFromSettings(settings.get(), secrets)
+      if ('reason' in setup) return { ok: false, message: setup.reason }
+      try {
+        const response = await setup.client.evaluate('Der Himmel ist heute blau.', {
+          weather: { type: 'noul', instructions: 'Is this statement about the weather or sky?' },
+        })
+        const answer = response.answers['weather']
+        const p =
+          answer?.type === 'noul' ? ` (Test-Antwort: ${Math.round(answer.noul * 100)} % ja)` : ''
+        return { ok: true, message: `Verbunden mit ${response.model ?? setup.client.model}${p}.` }
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : String(error) }
+      }
+    },
     'secrets:set': ({ provider, value }) => {
       secrets.set(provider, value)
       return secrets.status()

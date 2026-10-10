@@ -18,6 +18,8 @@ import { buildPromptBlocks } from '../workspace/attachments'
 import { extractDocument } from '../documents/extract'
 import type { UsageRepository } from '../storage/usage-repository'
 import { contextFromResult, parseContextResponse } from './context'
+import { jevClientFromSettings } from '../jev/config'
+import { createJevMcpServer, JEV_MCP_SERVER, JEV_TOOL_NAMES } from '../jev/mcp-server'
 import {
   fromSdkModelUsage,
   sumTotals,
@@ -41,6 +43,9 @@ export interface SessionManagerDeps {
   getSettings: () => Settings
   secrets: SecretStore
   chats: ChatRepository
+  /** Test hooks for the Jev decision tool. */
+  jevEndpoint?: string
+  jevFetch?: typeof fetch
   /** Token/cost log for the usage view; without it costs are still computed per answer. */
   usage?: UsageRepository
   /** Root directory for per-chat workspaces and the isolated agent config. */
@@ -119,6 +124,17 @@ async function readContextUsage(q: Query): Promise<ContextUsage | undefined> {
     return undefined
   }
 }
+
+const JEV_HINT_CHAT =
+  'Mit mcp__jev__evaluate (Jev von TypeSafe) beantwortest du typisierte Fragen schnell und ' +
+  'kalibriert: Auswahl (choice), Bewertung (score) und Ja/Nein-Wahrscheinlichkeit (noul). ' +
+  'Nutze es, wenn der Nutzer es verlangt oder um Texte/Daten zu klassifizieren, zu bewerten ' +
+  'oder deine eigene Antwort zu prüfen. Jev schreibt keine Texte.'
+
+const JEV_HINT_CODE =
+  'mcp__jev__evaluate asks TypeSafe Jev typed questions (choice / score / noul yes-probability) ' +
+  'and returns calibrated probabilities. Use it for classification, scoring and checks, or when ' +
+  'the user asks for Jev; it cannot generate text.'
 
 export function chatWorkspace(dataDir: string, chatId: string): string {
   return join(dataDir, 'chats', chatId)
@@ -329,9 +345,21 @@ export class SessionManager {
         onFile: (file) => emit({ chatId, type: 'output-file', file }),
         ...(this.deps.mediaFetch ? { fetchImpl: this.deps.mediaFetch } : {}),
       })
+      const jevSetup = settings.jevEnabled
+        ? jevClientFromSettings(settings, this.deps.secrets, {
+            endpoint: this.deps.jevEndpoint,
+            fetchImpl: this.deps.jevFetch,
+          })
+        : undefined
+      const jev = jevSetup && 'client' in jevSetup ? createJevMcpServer(jevSetup.client) : undefined
       const addons = this.deps.getAddons?.() ?? { mcpServers: {}, plugins: [], skills: [] }
-      // Tools that only read the web, create files for the user or load skills never need approval.
-      const autoAllowed = [...(web ? WEB_TOOL_NAMES : []), ...MEDIA_TOOL_NAMES, 'Skill']
+      // Tools that only read the web, create files, ask Jev or load skills never need approval.
+      const autoAllowed = [
+        ...(web ? WEB_TOOL_NAMES : []),
+        ...MEDIA_TOOL_NAMES,
+        ...(jev ? JEV_TOOL_NAMES : []),
+        'Skill',
+      ]
       const common: Options = {
         cwd,
         env: runtime.env,
@@ -345,6 +373,7 @@ export class SessionManager {
           ...addons.mcpServers,
           [MEDIA_MCP_SERVER]: media,
           ...(web ? { [WEB_MCP_SERVER]: web } : {}),
+          ...(jev ? { [JEV_MCP_SERVER]: jev } : {}),
         },
         plugins: addons.plugins,
         allowedTools: autoAllowed,
@@ -361,7 +390,11 @@ export class SessionManager {
             // user = installed skills (isolated config dir); project = CLAUDE.md, .claude/settings.json.
             settingSources: ['user', 'project'],
             skills: 'all',
-            systemPrompt: { type: 'preset', preset: 'claude_code', append: CODE_SYSTEM_APPEND },
+            systemPrompt: {
+              type: 'preset',
+              preset: 'claude_code',
+              append: jev ? `${CODE_SYSTEM_APPEND}\n${JEV_HINT_CODE}` : CODE_SYSTEM_APPEND,
+            },
             permissionMode: chat.permissionMode,
             ...(chat.permissionMode === 'bypassPermissions'
               ? { allowDangerouslySkipPermissions: true }
@@ -381,6 +414,7 @@ export class SessionManager {
                 ? 'Du hast Internetzugriff über web_search und web_fetch. Nutze ihn für aktuelle Informationen und nenne die Quellen-URLs.'
                 : '',
               'Mit generate_image erzeugst oder bearbeitest du Bilder, mit save_file speicherst du Dateien für den Nutzer – auch 3D-Modelle (.obj, .stl, .ply, .gltf), die die App interaktiv anzeigt.',
+              jev ? JEV_HINT_CHAT : '',
             ]
               .filter(Boolean)
               .join('\n'),

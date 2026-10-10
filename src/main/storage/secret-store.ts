@@ -1,7 +1,7 @@
 import { mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname } from 'node:path'
 import { z } from 'zod'
-import { ProviderIdSchema, type ProviderId, type SecretStatus } from '@shared/schemas/settings'
+import { SecretIdSchema, type SecretId, type SecretStatus } from '@shared/schemas/settings'
 
 /** Abstraction over Electron's safeStorage so the store can be tested without Electron. */
 export interface Cipher {
@@ -10,7 +10,7 @@ export interface Cipher {
   decrypt(data: Buffer): string
 }
 
-const SecretFileSchema = z.partialRecord(ProviderIdSchema, z.string())
+const SecretFileSchema = z.partialRecord(SecretIdSchema, z.string())
 
 /**
  * Stores API keys encrypted with the OS keystore (DPAPI on Windows).
@@ -22,7 +22,7 @@ export class SecretStore {
     private readonly cipher: Cipher,
   ) {}
 
-  get(provider: ProviderId): string | undefined {
+  get(provider: SecretId): string | undefined {
     const encoded = this.read()[provider]
     if (!encoded) return undefined
     try {
@@ -32,7 +32,7 @@ export class SecretStore {
     }
   }
 
-  set(provider: ProviderId, value: string): void {
+  set(provider: SecretId, value: string): void {
     const trimmed = value.trim()
     if (!trimmed) return this.clear(provider)
     if (!this.cipher.isAvailable()) {
@@ -43,7 +43,7 @@ export class SecretStore {
     this.write(data)
   }
 
-  clear(provider: ProviderId): void {
+  clear(provider: SecretId): void {
     const { [provider]: _removed, ...rest } = this.read()
     this.write(rest)
   }
@@ -54,11 +54,12 @@ export class SecretStore {
       anthropic: Boolean(data.anthropic),
       openrouter: Boolean(data.openrouter),
       ollama: Boolean(data.ollama),
+      typesafe: Boolean(data.typesafe),
       encryptionAvailable: this.cipher.isAvailable(),
     }
   }
 
-  private read(): Partial<Record<ProviderId, string>> {
+  private read(): Partial<Record<SecretId, string>> {
     try {
       const parsed = SecretFileSchema.safeParse(JSON.parse(readFileSync(this.filePath, 'utf8')))
       return parsed.success ? parsed.data : {}
@@ -67,7 +68,7 @@ export class SecretStore {
     }
   }
 
-  private write(data: Partial<Record<ProviderId, string>>): void {
+  private write(data: Partial<Record<SecretId, string>>): void {
     mkdirSync(dirname(this.filePath), { recursive: true })
     const tmp = `${this.filePath}.tmp`
     writeFileSync(tmp, JSON.stringify(data), { encoding: 'utf8', mode: 0o600 })

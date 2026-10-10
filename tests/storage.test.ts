@@ -81,6 +81,7 @@ describe('SecretStore', () => {
       anthropic: true,
       openrouter: false,
       ollama: false,
+      typesafe: false,
       encryptionAvailable: true,
     })
   })

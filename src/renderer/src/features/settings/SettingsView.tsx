@@ -12,6 +12,7 @@ import { ModelPicker, cleanError } from '../../components/ModelPicker'
 import { ImageGenerationSection } from './ImageGenerationSection'
 import { LocalServicesSection } from './LocalServicesSection'
 import { OcrSection } from './OcrSection'
+import { JevSection } from './JevSection'
 
 const PROVIDERS = ProviderIdSchema.options
 
@@ -71,6 +72,13 @@ export function SettingsView(props: { settings: Settings; onChange: (s: Settings
             onUpdate={update}
           />
         ))}
+
+        <JevSection
+          settings={settings}
+          secrets={secrets}
+          onSecrets={setSecrets}
+          onUpdate={update}
+        />
 
         <section className="space-y-2">
           <h2 className="font-medium">Internet</h2>

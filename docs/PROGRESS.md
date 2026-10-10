@@ -3,7 +3,7 @@
 Laufendes Protokoll zur Umsetzung von [`PLAN.md`](./PLAN.md).
 Zeiten in UTC. Legende: ✅ fertig · 🔄 in Arbeit · ⏳ offen · ⚠️ Problem/Hinweis
 
-**Letztes Update:** 2026-10-10 16:56
+**Letztes Update:** 2026-10-10 17:03
 
 ## Gesamtstatus
 
@@ -26,7 +26,7 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
 | Prüfung                                                                      | Ergebnis |
 | ---------------------------------------------------------------------------- | -------- |
 | TypeScript strict + ESLint                                                   | ✅       |
-| Unit- und Integrationstests (31 Dateien)                                     | ✅ 254   |
+| Unit- und Integrationstests (33 Dateien)                                     | ✅ 261   |
 | Integration mit echtem Runtime (Chat, Coding, Web, Medien, Add-ons, ComfyUI) | ✅       |
 | Integration: Handschrift-OCR (Ollama) und Office lesen/erstellen             | ✅       |
 | Live-Test echte Websuche (optional, `AIW_LIVE_WEB=1`)                        | ✅       |
@@ -34,6 +34,30 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
 | Windows-CI: Tests, Installer, Smoke-Test der installierten App               | ✅       |
 
 ## Protokoll
+
+### 2026-10-10 17:03 – Jev (TypeSafe) als Werkzeug für jedes Modell ✅
+
+- **Jev eingebunden**, das typsichere Entscheidungsmodell von TypeSafe. In den Einstellungen
+  unter „Jev (TypeSafe)“ wählst du den Zugang:
+  - **TypeSafe direkt** mit eigenem Key von console.typesafe.ai
+  - **Über OpenRouter** mit deinem vorhandenen OpenRouter-Key
+  - Dazu gibt es „Verbindung testen“ und eine Modellwahl (leer = neuestes).
+- **Automatisch nutzbar:** Sobald ein Key da ist, bekommt das gerade aktive Modell
+  (Anthropic, OpenRouter oder Ollama) das Werkzeug `evaluate`, ohne Freigabe-Abfrage. Es kann
+  in einem Aufruf mehrere Fragen stellen:
+  - **choice:** Auswahl aus bis zu 255 Optionen
+  - **score:** Bewertung auf 2–10 Stufen
+  - **noul:** Ja/Nein als Wahrscheinlichkeit
+  - Ergebnisse kommen mit Wahrscheinlichkeiten und Konfidenz zurück.
+- **Typsicher:** Die Fragen werden vor dem Senden mit denselben Regeln wie bei der API geprüft,
+  ebenso die Antworten. Fehlermeldungen kommen auf Deutsch, z. B. bei falschem Key oder
+  Überlastung. Bei Überlastung wird automatisch erneut versucht.
+- **Behoben (vorher):** Menüs schließen jetzt beim Klick daneben. Die Windows-CI dafür war grün.
+- **Getestet** mit einem nachgebauten Jev-Server:
+  - 7 neue Tests, darunter ein echter Agent-Durchlauf: Ein lokales Modell ordnet über Jev ein
+    Ticket ein.
+  - Ohne Key oder wenn ausgeschaltet, wird das Werkzeug nicht angeboten.
+  - Gesamt: 261 Tests, Smoke-Test OK.
 
 ### 2026-10-10 16:56 – Menüs schließen beim Klick daneben ✅
 
