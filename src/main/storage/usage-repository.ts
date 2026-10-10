@@ -22,6 +22,7 @@ const UsageRowSchema = z.object({
   cache_write_tokens: z.number(),
   cost_usd: z.number(),
   created_at: z.number(),
+  agent: z.string().catch('main'),
 })
 type UsageRow = z.infer<typeof UsageRowSchema>
 
@@ -191,13 +192,15 @@ export class UsageRepository {
     provider: ProviderId
     models: Record<string, ModelTotals>
     createdAt?: number
+    /** Who used it: 'main' (default), a Cowork role name, 'router' or 'terminal'. */
+    agent?: string
   }): void {
     const requestId = randomUUID()
     const createdAt = entry.createdAt ?? Date.now()
     const insert = this.db.prepare(
       `INSERT INTO usage (id, request_id, chat_id, provider, model, input_tokens, output_tokens,
-         cache_read_tokens, cache_write_tokens, cost_usd, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+         cache_read_tokens, cache_write_tokens, cost_usd, created_at, agent)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     for (const [model, t] of Object.entries(entry.models)) {
       insert.run(
@@ -212,6 +215,7 @@ export class UsageRepository {
         t.cacheWriteTokens,
         t.costUsd,
         createdAt,
+        entry.agent ?? 'main',
       )
     }
   }
@@ -232,6 +236,7 @@ export class UsageRepository {
     const total = new Bucket()
     const providers = new Map<ProviderId, Bucket>()
     const models = new Map<string, { provider: ProviderId; model: string; bucket: Bucket }>()
+    const agents = new Map<string, Bucket>()
     const granularity = range === 'today' ? 'hour' : 'day'
     const series = buildSeries(granularity, since ?? rows[0]?.created_at ?? now.getTime(), now)
     const bucket = <K>(map: Map<K, Bucket>, key: K) => {
@@ -242,6 +247,7 @@ export class UsageRepository {
     for (const row of rows) {
       total.add(row)
       bucket(providers, row.provider).add(row)
+      bucket(agents, row.agent).add(row)
       addToSeries(series, row)
       const key = `${row.provider}\u0000${row.model}`
       let m = models.get(key)
@@ -260,6 +266,7 @@ export class UsageRepository {
       byModel: [...models.values()]
         .map((m) => ({ provider: m.provider, model: m.model, ...m.bucket.totals }))
         .sort(byCost),
+      byAgent: [...agents].map(([agent, b]) => ({ agent, ...b.totals })).sort(byCost),
       granularity,
       series: series.map(({ requestIds, ...point }) => ({ ...point, requests: requestIds.size })),
     }
