@@ -3,7 +3,7 @@
 Laufendes Protokoll zur Umsetzung von [`PLAN.md`](./PLAN.md).
 Zeiten in UTC. Legende: ✅ fertig · 🔄 in Arbeit · ⏳ offen · ⚠️ Problem/Hinweis
 
-**Letztes Update:** 2026-10-10 17:27
+**Letztes Update:** 2026-10-10 17:32
 
 ## Gesamtstatus
 
@@ -35,7 +35,7 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
 
 ## Protokoll
 
-### 2026-10-10 17:12 – Updates: erstes Release v0.2.0 🔄
+### 2026-10-10 17:12 – Updates: erstes Release v0.2.0 ✅
 
 - **Ursache der Meldung „No published versions on GitHub“:** Es gab noch kein Release, nur
   CI-Artefakte. Die App kann sich aber nur über Releases aktualisieren.
@@ -55,6 +55,9 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
   - Der Installer-Name enthielt Leerzeichen, die GitHub zu Punkten macht. Dadurch passte der
     Link in `latest.yml` nicht mehr zur Datei. Der Installer heißt jetzt
     `AI-Workbench-Setup-<version>.exe`.
+- **Geprüft:** Das Release v0.2.0 ist veröffentlicht und vollständig (Installer, Blockmap,
+  `latest.yml`). Ich habe den Installer heruntergeladen: Größe und SHA-512 stimmen mit
+  `latest.yml` überein.
 
 ### 2026-10-10 17:03 – Jev (TypeSafe) als Werkzeug für jedes Modell ✅
 
