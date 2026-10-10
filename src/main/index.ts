@@ -26,6 +26,7 @@ import { SettingsStore } from './storage/settings-store'
 import { storeAttachment } from './workspace/attachments'
 import { handleFileProtocol, registerFileProtocolScheme } from './workspace/file-protocol'
 import { runSmokeTest } from './smoke'
+import { extractDocument } from './documents/extract'
 import { checkForUpdates, initUpdater, installUpdateNow } from './updater'
 import { createChromiumLoader, createSmartLoader } from './web/electron-loader'
 import { createWebMcpServer } from './web/mcp-server'
@@ -352,8 +353,9 @@ function bootstrap(): void {
       const chat = chats.summary(chatId)
       return chat ? listOutputs(outputsDir(dataDir, chat)) : []
     },
-    'documents:preview': () => {
-      throw new Error('Die Office-Vorschau ist noch nicht verfügbar.')
+    'documents:preview': async ({ path }) => {
+      assertAllowed(path)
+      return extractDocument(path, { maxChars: 200_000 })
     },
     'files:save-as': async ({ path }) => {
       assertAllowed(path)

@@ -3,7 +3,7 @@
 Laufendes Protokoll zur Umsetzung von [`PLAN.md`](./PLAN.md).
 Zeiten in UTC. Legende: ✅ fertig · 🔄 in Arbeit · ⏳ offen · ⚠️ Problem/Hinweis
 
-**Letztes Update:** 2026-10-10 11:07
+**Letztes Update:** 2026-10-10 13:35
 
 ## Gesamtstatus
 
@@ -26,13 +26,49 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
 | Prüfung                                                                      | Ergebnis |
 | ---------------------------------------------------------------------------- | -------- |
 | TypeScript strict + ESLint                                                   | ✅       |
-| Unit- und Integrationstests (26 Dateien)                                     | ✅ 195   |
+| Unit- und Integrationstests (29 Dateien)                                     | ✅ 243   |
 | Integration mit echtem Runtime (Chat, Coding, Web, Medien, Add-ons, ComfyUI) | ✅       |
+| Integration: Handschrift-OCR (Ollama) und Office lesen/erstellen             | ✅       |
 | Live-Test echte Websuche (optional, `AIW_LIVE_WEB=1`)                        | ✅       |
 | Smoke-Test App: Chat, Coding, Medien/3D, Chromium-Loader + Screenshots       | ✅       |
 | Windows-CI: Tests, Installer, Smoke-Test der installierten App               | ✅       |
 
 ## Protokoll
+
+### 2026-10-10 13:35 – Handschrift-Erkennung, Pinokio und Office-Dateien ✅
+
+- **Handschrift → Text, lokal auf der RTX 4060** (über Ollama):
+  - In den Einstellungen unter „Handschrift-Erkennung“ lädst du ein Modell per Knopfdruck
+    herunter, mit Fortschrittsbalken. Zur Wahl stehen Qwen3-VL 8B (empfohlen, ~6 GB),
+    Qwen3-VL 4B (~3 GB) und Qwen2.5-VL 7B.
+  - **Nur aktiv bei Benutzung:** Das Modell wird erst beim Erkennen in die Grafikkarte
+    geladen und danach wieder entladen (einstellbar: sofort, 1 Min., 5 Min.).
+  - Knopf „Text erkennen“ in der Bildvorschau mit „Kopieren“-Funktion. Der Agent hat
+    zusätzlich das Werkzeug `read_handwriting`.
+  - Das Modell lässt sich auch wieder entfernen, um Speicher freizugeben.
+- **Pinokio:**
+  - „Automatisch finden“ sucht laufende Ollama- und ComfyUI-Server auf deinem PC,
+    auch auf den von Pinokio vergebenen Ports. Mit „Verwenden“ übernimmst du einen Treffer.
+  - Für die Handschrift-Erkennung ist eine eigene Ollama-Adresse möglich.
+- **Office-Dateien** _(Teile per Sonnet-Subagent)_:
+  - **Lesen:** Word (.docx, .doc, .odt, .rtf), Excel (.xlsx, .xls, .ods, .csv) und
+    PowerPoint (.pptx, .odp).
+    - Angehängte Dateien gehen als Markdown an die KI, Tabellen bleiben Tabellen. Das
+      verstehen alle Modelle, auch lokale.
+    - Vorschau direkt in der App.
+  - **Erstellen:** Der Agent erzeugt echte Word-, Excel- und PowerPoint-Dateien:
+    - Word mit Überschriften, Listen und Tabellen
+    - Excel mit Zahlen und Formeln
+    - PowerPoint mit Stichpunkten, Notizen und Bildern
+  - Klare Meldungen bei passwortgeschützten oder kaputten Dateien.
+  - Alles läuft ohne Office-Installation und offline.
+- **Getestet:**
+  - 48 neue Tests, darunter echte Agent-Durchläufe:
+    - Ein angehängtes Word-Dokument kommt als Text bei der KI an, und sie erstellt daraus
+      eine Excel-Datei mit Formel.
+    - Die Handschrift wird über ein nachgebautes Ollama erkannt, das Modell wird danach
+      sofort entladen.
+  - Gesamt: 243 Tests, Smoke-Test OK.
 
 ### 2026-10-10 11:07 – Veröffentlicht auf `main` ✅
 

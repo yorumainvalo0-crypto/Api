@@ -215,6 +215,8 @@ export function buildPromptBlocks(
   prompt: string,
   attachments: Attachment[],
   capabilities: PromptCapabilities,
+  /** Office documents already converted to Markdown (or an error note), keyed by path. */
+  documents: ReadonlyMap<string, string> = new Map(),
 ): PromptBlock[] {
   const blocks: PromptBlock[] = []
   const notes: string[] = []
@@ -238,6 +240,11 @@ export function buildPromptBlocks(
           media_type: 'application/pdf',
           data: readFileSync(a.path).toString('base64'),
         },
+      })
+    } else if (a.kind === 'document' && documents.has(a.path)) {
+      blocks.push({
+        type: 'text',
+        text: `<document name="${a.name}" path="${a.path}">\n${documents.get(a.path) ?? ''}\n</document>`,
       })
     } else if (a.kind === 'text' && a.size <= ATTACHMENT_LIMITS.maxInlineTextBytes) {
       const content = readFileSync(a.path, 'utf8')

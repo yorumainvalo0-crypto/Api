@@ -13,6 +13,7 @@ import {
   type ComfyInputImage,
 } from './comfy-generate'
 import type { OllamaVision } from './ocr'
+import { createDocumentTools, DOCUMENT_TOOL_NAMES } from '../documents/tools'
 
 export const MEDIA_MCP_SERVER = 'media'
 export const MEDIA_TOOL_NAMES = [
@@ -20,6 +21,7 @@ export const MEDIA_TOOL_NAMES = [
   `mcp__${MEDIA_MCP_SERVER}__save_file`,
   `mcp__${MEDIA_MCP_SERVER}__generate_3d_model`,
   `mcp__${MEDIA_MCP_SERVER}__read_handwriting`,
+  ...DOCUMENT_TOOL_NAMES.map((name) => `mcp__${MEDIA_MCP_SERVER}__${name}`),
 ]
 
 export type ImageBackendConfig =
@@ -199,7 +201,9 @@ export function createMediaMcpServer(options: MediaServerOptions) {
     instructions:
       'generate_image creates or edits pictures. save_file stores any text file for the user; ' +
       'for 3D models write Wavefront OBJ (preferred), ASCII STL, ASCII PLY or glTF JSON with the ' +
-      'matching extension – the app shows them in an interactive 3D viewer.',
+      'matching extension – the app shows them in an interactive 3D viewer. read_document reads ' +
+      'Word/Excel/PowerPoint files; create_word_document, create_spreadsheet and ' +
+      'create_presentation create real .docx/.xlsx/.pptx files.',
     tools: [
       tool(
         'generate_image',
@@ -288,6 +292,11 @@ export function createMediaMcpServer(options: MediaServerOptions) {
       ),
       ...tool3d,
       ...toolOcr,
+      ...createDocumentTools({
+        readableRoots: options.readableRoots,
+        write,
+        safeName: safeOutputName,
+      }),
     ],
   })
 }

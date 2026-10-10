@@ -14,6 +14,7 @@ import { applyReplyEvent, EMPTY_REPLY, type ReplyState } from '@shared/message-p
 import type { SecretStore } from '../storage/secret-store'
 import type { ChatRepository } from '../storage/chat-repository'
 import { buildPromptBlocks } from '../workspace/attachments'
+import { extractDocument } from '../documents/extract'
 import { isInside } from '../workspace/paths'
 import { buildProviderRuntime } from './providers'
 import { normalizeSdkMessage, type SdkMessageLike } from './normalize'
@@ -58,6 +59,9 @@ const CHAT_SYSTEM_PROMPT = [
   'Du bist ein hilfreicher, präziser Assistent in der Desktop-App "AI Workbench".',
   'Antworte in der Sprache des Nutzers (meist Deutsch). Nutze Markdown für Struktur und Code.',
   'Angehängte Dateien, die nicht direkt eingebettet sind, werden mit ihrem Dateipfad genannt.',
+  'Angehängte Office-Dateien (Word, Excel, PowerPoint) erhältst du als Markdown. Mit read_document',
+  'liest du weitere, mit create_word_document, create_spreadsheet und create_presentation',
+  'erstellst du echte .docx-, .xlsx- und .pptx-Dateien für den Nutzer.',
 ].join('\n')
 
 const CODE_SYSTEM_APPEND = [
@@ -66,7 +70,30 @@ const CODE_SYSTEM_APPEND = [
   'comments in English. The user sees your tool calls and file diffs in the app.',
   'Use mcp__media__generate_image to create or edit images (saved to ./ai-output and shown to',
   'the user). 3D models (.obj/.stl/.ply/.gltf/.glb) in the project can be previewed in the app.',
+  'Use mcp__media__read_document to read Word/Excel/PowerPoint files and',
+  'mcp__media__create_word_document / create_spreadsheet / create_presentation to create them.',
 ].join('\n')
+
+/** Converts attached office files to Markdown so every model (also local ones) can read them. */
+async function extractAttachedDocuments(attachments: Attachment[]): Promise<Map<string, string>> {
+  const documents = new Map<string, string>()
+  for (const a of attachments) {
+    if (a.kind !== 'document') continue
+    try {
+      const doc = await extractDocument(a.path)
+      documents.set(
+        a.path,
+        `${doc.summary}${doc.truncated ? ' (gekürzt – mit read_document und max_chars mehr lesen)' : ''}\n\n${doc.markdown}`,
+      )
+    } catch (error) {
+      documents.set(
+        a.path,
+        `[Konnte nicht gelesen werden: ${error instanceof Error ? error.message : String(error)}]`,
+      )
+    }
+  }
+  return documents
+}
 
 export function chatWorkspace(dataDir: string, chatId: string): string {
   return join(dataDir, 'chats', chatId)
@@ -302,7 +329,13 @@ export class SessionManager {
               .join('\n'),
           }
 
-      const blocks = buildPromptBlocks(request.prompt, attachments, { pdf: provider !== 'ollama' })
+      const documents = await extractAttachedDocuments(attachments)
+      const blocks = buildPromptBlocks(
+        request.prompt,
+        attachments,
+        { pdf: provider !== 'ollama' },
+        documents,
+      )
       const prompt = (async function* (): AsyncGenerator<SDKUserMessage> {
         yield {
           type: 'user',

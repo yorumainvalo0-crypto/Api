@@ -15,6 +15,8 @@ Der Agent-Kern ist das **Claude Agent SDK** (derselbe Kern wie Claude Code).
 | **Coding-Agent**     | „Projekt öffnen“: Der Agent liest/ändert Dateien und führt Befehle aus – mit Freigaben (Erlauben / Immer / Ablehnen) und vier Modi; Diffs, Dateibaum, Git, Terminal; gefährliche Befehle werden immer blockiert                                   |
 | **Internet**         | Websuche (DuckDuckGo/Bing) und Seiten lesen im eingebauten Chromium – kostenlos, ohne Key, ohne Server                                                                                                                                            |
 | **Bilder & 3D**      | Bilder erzeugen/bearbeiten über OpenRouter **oder lokal mit ComfyUI** (kostenlos); echte 3D-Modelle (GLB) über ComfyUI-Workflows wie Hunyuan3D oder vom Agenten als OBJ/STL/PLY/glTF geschrieben; interaktiver 3D-Viewer, PDF-Vorschau in der App |
+| **Office**           | Word, Excel, PowerPoint (auch .doc/.xls/.odt/.ods/.rtf/.csv) lesen, in der App ansehen und vom Agenten neu erstellen lassen – ohne Office-Installation                                                                                            |
+| **Handschrift**      | Handschrift und Scans lokal in Text umwandeln (Ollama-Vision-Modell, z. B. auf einer RTX 4060); das Modell belegt die Grafikkarte nur während der Erkennung                                                                                       |
 | **Skills & Add-ons** | Skills und Plugins aus GitHub (z. B. `anthropics/skills`) oder lokalen Ordnern; MCP-Server aus der offiziellen Registry oder manuell                                                                                                              |
 | **Sicherheit**       | Keys verschlüsselt (Windows DPAPI), Sandbox-Renderer, Dateizugriff nur auf App-Daten und geöffnete Projekte, Kostenlimit pro Anfrage                                                                                                              |
 
@@ -49,6 +51,17 @@ Workflows: in ComfyUI „Workflow → Export (API)“, im Prompt-Feld `{{prompt}
 (optional `{{input_image}}`, `{{seed}}`, `{{negative}}`) und als Bild- oder 3D-Workflow
 importieren. Ein 3D-Workflow (z. B. Hunyuan3D mit „Save GLB“) wird dem Agenten automatisch als
 Werkzeug angeboten.
+
+**Handschrift-Erkennung:** Ollama installieren und starten (direkt oder über Pinokio).
+Einstellungen → „Handschrift-Erkennung“ → Modell wählen (Qwen3-VL 8B passt in 8 GB VRAM) →
+„Herunterladen“. Danach in jeder Bildvorschau „Text erkennen“ oder im Chat z. B. „Was steht auf
+dem Zettel?“. Das Modell wird nach der eingestellten Zeit wieder aus der Grafikkarte entladen.
+
+**Pinokio:** Ollama und ComfyUI in Pinokio starten, dann Einstellungen → „Lokale KI-Dienste“ →
+„Automatisch finden“ → „Verwenden“. Die App findet die von Pinokio vergebenen Ports selbst.
+
+**Office:** Word-, Excel- oder PowerPoint-Dateien einfach anhängen; die KI bekommt den Inhalt
+als Text. Neue Dateien z. B. mit „Erstelle daraus eine Excel-Tabelle mit Summen“.
 
 Ollama: Ollama ≥ 0.14 installieren, Modell laden (`ollama pull qwen3:8b`), in den Einstellungen
 Provider „Ollama“ und das Modell wählen. Für Werkzeug-Nutzung sind Claude-Modelle am

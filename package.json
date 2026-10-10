@@ -28,11 +28,16 @@
     "@anthropic-ai/sdk": "0.133.0",
     "@modelcontextprotocol/sdk": "1.32.1",
     "@mozilla/readability": "0.6.0",
+    "docx": "9.9.0",
     "electron-log": "5.4.4",
     "electron-updater": "6.8.9",
     "fflate": "0.8.3",
     "linkedom": "0.18.13",
+    "mammoth": "1.13.0",
+    "pptxgenjs": "4.0.1",
     "turndown": "7.2.4",
+    "word-extractor": "1.0.4",
+    "xlsx": "https://cdn.sheetjs.com/xlsx-0.20.3/xlsx-0.20.3.tgz",
     "yaml": "2.9.1",
     "zod": "4.6.5"
   },
@@ -69,5 +74,8 @@
     "typescript-eslint": "8.71.1",
     "vite": "7.3.7",
     "vitest": "5.0.3"
+  },
+  "overrides": {
+    "image-size": "2.0.4"
   }
 }
