@@ -7,6 +7,7 @@ import { chatAttachmentsDir, chatWorkspace, SessionManager } from './agent/sessi
 import { resolveClaudeExecutable } from './agent/executable'
 import { registerIpcHandlers, sendEvent } from './ipc/register'
 import { listModels, testConnection } from './providers/model-catalog'
+import { createProjectHandlers } from './project/handlers'
 import { ChatRepository } from './storage/chat-repository'
 import { openDatabase } from './storage/database'
 import { SecretStore } from './storage/secret-store'
@@ -144,6 +145,7 @@ function bootstrap(): void {
     },
     'agent:send': (request) => ({ accepted: sessions.send(request) }),
     'agent:cancel': ({ chatId }) => ({ ok: sessions.cancel(chatId) }),
+    ...createProjectHandlers({ getTarget: () => mainWindow?.webContents }),
   })
 
   app.on('before-quit', () => sessions.cancelAll())

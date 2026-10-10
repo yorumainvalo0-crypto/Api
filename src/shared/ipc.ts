@@ -13,6 +13,7 @@ import {
   ChatSummarySchema,
 } from './schemas/chat'
 import { ConnectionTestResultSchema, ModelInfoSchema } from './schemas/models'
+import { projectContract, projectEvents } from './ipc-project'
 
 const ChatIdInput = z.object({ chatId: z.string().min(1) })
 
@@ -60,6 +61,7 @@ export const ipcContract = {
   'dialog:open-files': { input: z.void(), output: z.array(z.string()) },
   'agent:send': { input: ChatRequestSchema, output: z.object({ accepted: z.boolean() }) },
   'agent:cancel': { input: ChatIdInput, output: z.object({ ok: z.boolean() }) },
+  ...projectContract,
 } as const
 
 export type IpcContract = typeof ipcContract
@@ -70,6 +72,7 @@ export type IpcOutput<C extends IpcChannel> = z.infer<IpcContract[C]['output']>
 /** Main -> renderer push events. */
 export const ipcEvents = {
   'agent:event': AgentEventSchema,
+  ...projectEvents,
 } as const
 
 export type IpcEventName = keyof typeof ipcEvents
