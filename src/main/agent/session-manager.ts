@@ -18,6 +18,7 @@ import { buildPromptBlocks } from '../workspace/attachments'
 import { extractDocument } from '../documents/extract'
 import type { UsageRepository } from '../storage/usage-repository'
 import { contextFromResult, parseContextResponse } from './context'
+import { describeAppCapabilities } from './app-context'
 import { jevClientFromSettings } from '../jev/config'
 import { createJevMcpServer, JEV_MCP_SERVER, JEV_TOOL_NAMES } from '../jev/mcp-server'
 import {
@@ -76,19 +77,14 @@ const CHAT_SYSTEM_PROMPT = [
   'Du bist ein hilfreicher, präziser Assistent in der Desktop-App "AI Workbench".',
   'Antworte in der Sprache des Nutzers (meist Deutsch). Nutze Markdown für Struktur und Code.',
   'Angehängte Dateien, die nicht direkt eingebettet sind, werden mit ihrem Dateipfad genannt.',
-  'Angehängte Office-Dateien (Word, Excel, PowerPoint) erhältst du als Markdown. Mit read_document',
-  'liest du weitere, mit create_word_document, create_spreadsheet und create_presentation',
-  'erstellst du echte .docx-, .xlsx- und .pptx-Dateien für den Nutzer.',
+  'Ist das Internet aktiv, nutze es bei aktuellen Themen und nenne die Quellen-URLs.',
 ].join('\n')
 
 const CODE_SYSTEM_APPEND = [
   'You are running inside the "AI Workbench" desktop app on the user\'s own machine.',
   'Reply to the user in their language (usually German). Keep code, identifiers and code',
   'comments in English. The user sees your tool calls and file diffs in the app.',
-  'Use mcp__media__generate_image to create or edit images (saved to ./ai-output and shown to',
-  'the user). 3D models (.obj/.stl/.ply/.gltf/.glb) in the project can be previewed in the app.',
-  'Use mcp__media__read_document to read Word/Excel/PowerPoint files and',
-  'mcp__media__create_word_document / create_spreadsheet / create_presentation to create them.',
+  'Files created with the mcp__media__ tools are saved to ./ai-output and shown to the user.',
 ].join('\n')
 
 /** Converts attached office files to Markdown so every model (also local ones) can read them. */
@@ -124,17 +120,6 @@ async function readContextUsage(q: Query): Promise<ContextUsage | undefined> {
     return undefined
   }
 }
-
-const JEV_HINT_CHAT =
-  'Mit mcp__jev__evaluate (Jev von TypeSafe) beantwortest du typisierte Fragen schnell und ' +
-  'kalibriert: Auswahl (choice), Bewertung (score) und Ja/Nein-Wahrscheinlichkeit (noul). ' +
-  'Nutze es, wenn der Nutzer es verlangt oder um Texte/Daten zu klassifizieren, zu bewerten ' +
-  'oder deine eigene Antwort zu prüfen. Jev schreibt keine Texte.'
-
-const JEV_HINT_CODE =
-  'mcp__jev__evaluate asks TypeSafe Jev typed questions (choice / score / noul yes-probability) ' +
-  'and returns calibrated probabilities. Use it for classification, scoring and checks, or when ' +
-  'the user asks for Jev; it cannot generate text.'
 
 /** The SDK effort option; local Ollama models do not understand the effort parameter. */
 export function effortOption(
@@ -361,6 +346,37 @@ export class SessionManager {
         : undefined
       const jev = jevSetup && 'client' in jevSetup ? createJevMcpServer(jevSetup.client) : undefined
       const addons = this.deps.getAddons?.() ?? { mcpServers: {}, plugins: [], skills: [] }
+      const capabilities = (mode: 'chat' | 'code') =>
+        describeAppCapabilities({
+          mode,
+          provider,
+          model: modelLabel,
+          effort: provider === 'ollama' ? 'default' : settings.effort,
+          webAccess: Boolean(web),
+          image:
+            settings.imageBackend === 'comfyui' && comfyConfig
+              ? { backend: 'comfyui', url: settings.comfyUrl }
+              : {
+                  backend: 'openrouter',
+                  ready: Boolean(this.deps.secrets.get('openrouter')),
+                  model: settings.imageModel,
+                },
+          workflows3d: (store?.list() ?? []).filter((w) => w.kind === '3d').map((w) => w.name),
+          ocr: { enabled: settings.ocrEnabled, model: settings.ocrModel },
+          jev:
+            jev && jevSetup && 'client' in jevSetup
+              ? { active: true, source: settings.jevSource }
+              : {
+                  active: false,
+                  reason:
+                    jevSetup && 'reason' in jevSetup
+                      ? jevSetup.reason
+                      : 'In den Einstellungen ausgeschaltet.',
+                },
+          skills: addons.skills,
+          plugins: addons.plugins.length,
+          mcpServers: Object.keys(addons.mcpServers),
+        })
       // Tools that only read the web, create files, ask Jev or load skills never need approval.
       const autoAllowed = [
         ...(web ? WEB_TOOL_NAMES : []),
@@ -402,7 +418,7 @@ export class SessionManager {
             systemPrompt: {
               type: 'preset',
               preset: 'claude_code',
-              append: jev ? `${CODE_SYSTEM_APPEND}\n${JEV_HINT_CODE}` : CODE_SYSTEM_APPEND,
+              append: `${CODE_SYSTEM_APPEND}\n\n${capabilities('code')}`,
             },
             permissionMode: chat.permissionMode,
             ...(chat.permissionMode === 'bypassPermissions'
@@ -417,16 +433,7 @@ export class SessionManager {
             settingSources: addons.skills.length > 0 ? ['user'] : [],
             ...(addons.skills.length > 0 ? { skills: addons.skills } : {}),
             permissionMode: 'default',
-            systemPrompt: [
-              CHAT_SYSTEM_PROMPT,
-              web
-                ? 'Du hast Internetzugriff über web_search und web_fetch. Nutze ihn für aktuelle Informationen und nenne die Quellen-URLs.'
-                : '',
-              'Mit generate_image erzeugst oder bearbeitest du Bilder, mit save_file speicherst du Dateien für den Nutzer – auch 3D-Modelle (.obj, .stl, .ply, .gltf), die die App interaktiv anzeigt.',
-              jev ? JEV_HINT_CHAT : '',
-            ]
-              .filter(Boolean)
-              .join('\n'),
+            systemPrompt: `${CHAT_SYSTEM_PROMPT}\n\n${capabilities('chat')}`,
           }
 
       const documents = await extractAttachedDocuments(attachments)

@@ -2,8 +2,16 @@
 
 @custom-variant dark (&:where(.dark, .dark *));
 
+/* Follow the app theme (not the OS) so native controls like select popups match. */
 :root {
-  color-scheme: light dark;
+  color-scheme: light;
+}
+:root.dark {
+  color-scheme: dark;
+}
+
+select option {
+  @apply bg-white text-zinc-900 dark:bg-zinc-900 dark:text-zinc-100;
 }
 
 html,

@@ -178,6 +178,25 @@ async function checkPopoverDismiss(win: BrowserWindow): Promise<void> {
   })()`)) as boolean
   if (stillOpen) throw new Error('model picker did not close on an outside click')
   console.log('[smoke] popover closes on outside click')
+
+  // Native select popups follow color-scheme; it must match the app theme, not the OS.
+  const theme = (await win.webContents.executeJavaScript(`(() => {
+    const select = document.querySelector('main header select')
+    const option = select?.querySelector('option')
+    return {
+      dark: document.documentElement.classList.contains('dark'),
+      scheme: getComputedStyle(document.documentElement).colorScheme,
+      optionBg: option ? getComputedStyle(option).backgroundColor : null,
+      optionColor: option ? getComputedStyle(option).color : null,
+    }
+  })()`)) as { dark: boolean; scheme: string; optionBg: string | null; optionColor: string | null }
+  if (theme.scheme !== (theme.dark ? 'dark' : 'light')) {
+    throw new Error(`color-scheme ${theme.scheme} does not match the app theme`)
+  }
+  if (theme.optionBg !== null && theme.optionBg === theme.optionColor) {
+    throw new Error('select options are unreadable')
+  }
+  console.log(`[smoke] theme ${JSON.stringify(theme)}`)
 }
 
 /** Optionally saves a screenshot of the opened smoke chat (AIW_SMOKE_SCREENSHOT=<file.png>). */

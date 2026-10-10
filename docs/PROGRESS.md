@@ -3,7 +3,7 @@
 Laufendes Protokoll zur Umsetzung von [`PLAN.md`](./PLAN.md).
 Zeiten in UTC. Legende: ✅ fertig · 🔄 in Arbeit · ⏳ offen · ⚠️ Problem/Hinweis
 
-**Letztes Update:** 2026-10-10 18:08
+**Letztes Update:** 2026-10-10 18:19
 
 ## Gesamtstatus
 
@@ -26,7 +26,7 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
 | Prüfung                                                                      | Ergebnis |
 | ---------------------------------------------------------------------------- | -------- |
 | TypeScript strict + ESLint                                                   | ✅       |
-| Unit- und Integrationstests (35 Dateien)                                     | ✅ 267   |
+| Unit- und Integrationstests (36 Dateien)                                     | ✅ 270   |
 | Integration mit echtem Runtime (Chat, Coding, Web, Medien, Add-ons, ComfyUI) | ✅       |
 | Integration: Handschrift-OCR (Ollama) und Office lesen/erstellen             | ✅       |
 | Live-Test echte Websuche (optional, `AIW_LIVE_WEB=1`)                        | ✅       |
@@ -34,6 +34,23 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
 | Windows-CI: Tests, Installer, Smoke-Test der installierten App               | ✅       |
 
 ## Protokoll
+
+### 2026-10-10 18:19 – v0.2.3: Lesbare Auswahllisten, Claude kennt die App ✅
+
+- **Behoben:** Aufgeklappte Auswahllisten (z. B. Effort) waren im Dunkelmodus weiß auf weiß.
+  Native Listen folgen jetzt dem Design der App statt dem von Windows. Der Smoke-Test prüft
+  das in der echten App.
+- **Claude kennt die App:** Bei jeder Anfrage bekommt das Modell einen aktuellen Abschnitt
+  „Was die AI Workbench kann“:
+  - **Jev von TypeSafe AI:** ob es aktiv ist, wofür es gut ist (choice / score / noul) und dass
+    es genutzt werden soll, wenn du Jev erwähnst. Ist Jev nicht aktiv, nennt Claude den Grund
+    und wo es eingeschaltet wird, statt so zu tun, als ob.
+  - Alle Werkzeuge mit ihrem Status: Internet, Bilder (OpenRouter/ComfyUI), 3D, Office,
+    Handschrift, installierte Skills, MCP-Server und Plugins.
+  - App-Funktionen zum Erklären: Coding, Modell/Effort, Kontext, Verbrauch, Add-ons, Pinokio,
+    Updates, Dunkelmodus.
+- **Getestet:** 3 neue Tests und eine Prüfung im Agent-Test, dass Claude Jev auch ohne Key
+  kennt. Gesamt 270 Tests, Smoke-Test OK.
 
 ### 2026-10-10 18:08 – v0.2.2: Effort im Chat einstellbar ✅
 

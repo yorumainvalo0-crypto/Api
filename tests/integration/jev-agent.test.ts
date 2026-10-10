@@ -122,6 +122,8 @@ describe('Jev decision tool inside the agent (real runtime)', () => {
     })
     await run(manager({ ...settings, ollamaBaseUrl: anthropic.url }, secrets, []), 'j2')
     expect(toolNames).not.toContain('mcp__jev__evaluate')
+    // The model still knows Jev exists and how the user can switch it on.
+    expect(systemPrompt).toContain('Kein TypeSafe-API-Key gespeichert.')
 
     secrets.set('typesafe', 'ts-test-key')
     await run(
