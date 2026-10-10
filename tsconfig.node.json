@@ -13,6 +13,7 @@
     "src/shared/**/*",
     "scripts/**/*.ts",
     "tests/**/*",
-    "src/renderer/src/features/media/media-utils.ts"
+    "src/renderer/src/features/media/media-utils.ts",
+    "src/renderer/src/features/media/pdf-utils.ts"
   ]
 }

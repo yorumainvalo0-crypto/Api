@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, type ReactNode } from 'react'
+import { Component, lazy, Suspense, useEffect, useMemo, useState, type ReactNode } from 'react'
 import {
   Download,
   ExternalLink,
@@ -26,6 +26,9 @@ export interface PreviewFile {
   mimeType: string
 }
 
+// pdf.js is large, so the viewer is only loaded when a PDF is actually shown.
+const PdfViewer = lazy(() => import('./PdfViewer').then((m) => ({ default: m.PdfViewer })))
+
 /** Text files are only shown up to this size. */
 const TEXT_PREVIEW_LIMIT = 512 * 1024
 
@@ -44,7 +47,7 @@ export function PreviewKindIcon(props: { file: PreviewFile; size?: number; class
 }
 
 /**
- * Viewer for one file: image, 3D model, text/code or a generic card, with a toolbar for
+ * Viewer for one file: image, 3D model, PDF, text/code or a generic card, with a toolbar for
  * "save as", "show in folder" and "open externally". Fills its parent (flex column).
  */
 export function FilePreview(props: { file: PreviewFile; toolbarExtra?: ReactNode }) {
@@ -66,10 +69,25 @@ export function FilePreview(props: { file: PreviewFile; toolbarExtra?: ReactNode
         {kind === 'model3d' && <ModelViewer path={file.path} name={file.name} />}
         {kind === 'text' && <TextPreview key={file.path} file={file} />}
         {kind === 'pdf' && (
-          <NoPreview
-            file={file}
-            text="PDF-Dokumente werden im Standardprogramm geöffnet (eingebettete Vorschau ist aus Sicherheitsgründen deaktiviert)."
-          />
+          <RenderErrorBoundary
+            key={file.path}
+            fallback={
+              <NoPreview
+                file={file}
+                text="Die PDF-Vorschau konnte nicht geladen werden. Du kannst das Dokument im Standardprogramm öffnen."
+              />
+            }
+          >
+            <Suspense
+              fallback={
+                <p className="flex items-center gap-2 px-3 py-2 text-xs text-zinc-500">
+                  <Loader2 size={12} className="animate-spin" /> PDF-Viewer wird geladen …
+                </p>
+              }
+            >
+              <PdfViewer path={file.path} name={file.name} />
+            </Suspense>
+          </RenderErrorBoundary>
         )}
         {kind === 'file' && (
           <NoPreview file={file} text="Für diesen Dateityp gibt es keine Vorschau." />
@@ -77,6 +95,22 @@ export function FilePreview(props: { file: PreviewFile; toolbarExtra?: ReactNode
       </div>
     </div>
   )
+}
+
+/** Shows `fallback` if a child fails to render, e.g. when a lazy chunk cannot be loaded. */
+class RenderErrorBoundary extends Component<
+  { children: ReactNode; fallback: ReactNode },
+  { failed: boolean }
+> {
+  override state = { failed: false }
+
+  static getDerivedStateFromError(): { failed: boolean } {
+    return { failed: true }
+  }
+
+  override render(): ReactNode {
+    return this.state.failed ? this.props.fallback : this.props.children
+  }
 }
 
 type ActionId = 'save' | 'folder' | 'external'

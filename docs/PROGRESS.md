@@ -3,7 +3,7 @@
 Laufendes Protokoll zur Umsetzung von [`PLAN.md`](./PLAN.md).
 Zeiten in UTC. Legende: ✅ fertig · 🔄 in Arbeit · ⏳ offen · ⚠️ Problem/Hinweis
 
-**Letztes Update:** 2026-10-10 10:33
+**Letztes Update:** 2026-10-10 11:05
 
 ## Gesamtstatus
 
@@ -23,16 +23,42 @@ Zeiten in UTC. Legende: ✅ fertig · 🔄 in Arbeit · ⏳ offen · ⚠️ Prob
 
 Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
 
-| Prüfung                                                                | Ergebnis |
-| ---------------------------------------------------------------------- | -------- |
-| TypeScript strict + ESLint                                             | ✅       |
-| Unit-Tests (21 Dateien)                                                | ✅ 165   |
-| Integration mit echtem Runtime (Chat, Coding, Web, Medien, Add-ons)    | ✅       |
-| Live-Test echte Websuche (optional, `AIW_LIVE_WEB=1`)                  | ✅       |
-| Smoke-Test App: Chat, Coding, Medien/3D, Chromium-Loader + Screenshots | ✅       |
-| Windows-CI: Tests, Installer, Smoke-Test der installierten App         | ✅       |
+| Prüfung                                                                      | Ergebnis |
+| ---------------------------------------------------------------------------- | -------- |
+| TypeScript strict + ESLint                                                   | ✅       |
+| Unit- und Integrationstests (26 Dateien)                                     | ✅ 195   |
+| Integration mit echtem Runtime (Chat, Coding, Web, Medien, Add-ons, ComfyUI) | ✅       |
+| Live-Test echte Websuche (optional, `AIW_LIVE_WEB=1`)                        | ✅       |
+| Smoke-Test App: Chat, Coding, Medien/3D, Chromium-Loader + Screenshots       | ✅       |
+| Windows-CI: Tests, Installer, Smoke-Test der installierten App               | ✅       |
 
 ## Protokoll
+
+### 2026-10-10 11:05 – Erweiterungen: PDF-Vorschau und lokale Bild-/3D-Erzeugung ✅
+
+- **PDF-Vorschau in der App** _(Sonnet-Subagent)_ mit pdf.js:
+  - Seiten werden erst beim Scrollen gerendert.
+  - Zoom und „Seitenbreite“, Seitennavigation „n / N“
+  - Verständliche Fehlermeldungen bei kaputten oder passwortgeschützten PDFs
+  - Die Sicherheitsregeln (CSP) mussten dafür nicht gelockert werden.
+  - pdf.js wird erst geladen, wenn ein PDF geöffnet wird.
+  - In einem echten Electron-Fenster mit einem 40-seitigen PDF geprüft.
+  - ⚠️ Einige gescannte PDFs mit JPEG2000-/JBIG2-Bildern zeigen diese Bilder evtl. nicht an.
+    Das wäre nur mit einer Lockerung für WebAssembly möglich und ist daher bewusst weggelassen.
+- **Lokale Erzeugung mit ComfyUI** (kostenlos, auf deiner Grafikkarte):
+  - In den Einstellungen wählst du zwischen „OpenRouter (Cloud)“ und „ComfyUI (lokal)“.
+    Es gibt „Verbindung testen“, eine Checkpoint-Auswahl und die Auflösung.
+  - Eingebauter Text-zu-Bild-Workflow (SD 1.5, SDXL u. a.)
+  - Eigene Workflows im API-Format importieren, mit den Platzhaltern `{{prompt}}`,
+    `{{input_image}}`, `{{seed}}` und `{{negative}}`.
+  - 3D-Workflows (z. B. Hunyuan3D → GLB) stehen dem Agenten als Werkzeug
+    `generate_3d_model` zur Verfügung. Das Ergebnis erscheint im 3D-Viewer.
+  - Verständliche Fehlermeldungen, z. B. wenn ComfyUI nicht läuft, ein Workflow im falschen
+    Format vorliegt oder Nodes/Modelle fehlen.
+  - **Getestet** mit einem nachgebauten ComfyUI-Server (11 Tests) und über den echten
+    Agenten: Er erzeugt ein Bild, lädt es in ComfyUI hoch und bekommt ein gültiges GLB-Modell
+    zurück – ohne Cloud-Key.
+- Das GitHub-Repo ist öffentlich, damit funktioniert das Auto-Update über Releases.
 
 ### 2026-10-10 10:33 – Phase 6 abgeschlossen ✅ · Projekt komplett
 
