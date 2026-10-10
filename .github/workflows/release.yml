@@ -31,7 +31,9 @@ jobs:
         run: |
           version=$(node -p "require('./package.json').version")
           echo "version=$version" >> "$GITHUB_OUTPUT"
-          if gh release view "v$version" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+          # Publish when the release is missing or incomplete (the updater needs latest.yml).
+          assets=$(gh release view "v$version" --repo "${{ github.repository }}" --json assets -q '.assets[].name' 2>/dev/null || true)
+          if echo "$assets" | grep -qx 'latest.yml'; then
             echo "v$version is already released."
             echo "publish=false" >> "$GITHUB_OUTPUT"
           else
@@ -52,7 +54,22 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run build
-      - name: Build and publish installer
-        run: npx electron-builder --win --x64 --publish always
+      - name: Build installer
+        run: npx electron-builder --win --x64 --publish never
+      # Upload with gh instead of electron-builder's publisher, which can race with itself
+      # when creating the release and then skips latest.yml.
+      - name: Publish GitHub release
+        shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          version='${{ needs.check.outputs.version }}'
+          dir="release/$version"
+          ls -la "$dir"
+          if ! gh release view "v$version" >/dev/null 2>&1; then
+            gh release create "v$version" --target "$GITHUB_SHA" \
+              --title "AI Workbench $version" --generate-notes
+          fi
+          gh release upload "v$version" --clobber \
+            "$dir"/*.exe "$dir"/*.exe.blockmap "$dir"/latest.yml
+          gh release view "v$version" --json assets -q '.assets[].name'
