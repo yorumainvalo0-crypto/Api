@@ -1,6 +1,6 @@
 import { rmSync } from 'node:fs'
 import { join } from 'node:path'
-import { copyFileSync } from 'node:fs'
+import { copyFileSync, writeFileSync } from 'node:fs'
 import { basename } from 'node:path'
 import { app, BrowserWindow, dialog, safeStorage, shell } from 'electron'
 import log from 'electron-log/main'
@@ -10,8 +10,11 @@ import { resolveClaudeExecutable } from './agent/executable'
 import { registerIpcHandlers, sendEvent } from './ipc/register'
 import { listModels, testConnection } from './providers/model-catalog'
 import { createProjectHandlers } from './project/handlers'
+import { AddonStore } from './addons/addon-store'
+import { createAddonHandlers } from './addons/handlers'
 import { isAllowedPath, isExecutable, listOutputs, outputsDir } from './media/outputs'
 import { ChatRepository } from './storage/chat-repository'
+import { chatToMarkdown, exportFileName } from './storage/chat-export'
 import { openDatabase } from './storage/database'
 import { SecretStore } from './storage/secret-store'
 import { SettingsStore } from './storage/settings-store'
@@ -29,6 +32,13 @@ if (process.env['AIW_USER_DATA']) app.setPath('userData', process.env['AIW_USER_
 
 log.initialize()
 registerFileProtocolScheme()
+// Allow WebGL (3D viewer) to fall back to software rendering on machines without a usable GPU
+// driver (e.g. VMs). Only local app content uses WebGL; web pages load with WebGL disabled.
+app.commandLine.appendSwitch('enable-unsafe-swiftshader')
+
+// Never crash silently: log unexpected errors from the main process.
+process.on('uncaughtException', (error) => log.error('uncaughtException', error))
+process.on('unhandledRejection', (reason) => log.error('unhandledRejection', reason))
 
 let mainWindow: BrowserWindow | undefined
 
@@ -70,11 +80,21 @@ function createWindow(): BrowserWindow {
 function bootstrap(): void {
   const dataDir = app.getPath('userData')
   const settings = new SettingsStore(join(dataDir, 'settings.json'))
-  const secrets = new SecretStore(join(dataDir, 'secrets.json'), {
+  const cipher = {
     isAvailable: () => safeStorage.isEncryptionAvailable(),
-    encrypt: (plain) => safeStorage.encryptString(plain),
-    decrypt: (data) => safeStorage.decryptString(data),
-  })
+    encrypt: (plain: string) => safeStorage.encryptString(plain),
+    decrypt: (data: Buffer) => safeStorage.decryptString(data),
+  }
+  const secrets = new SecretStore(join(dataDir, 'secrets.json'), cipher)
+  // Skills live in the agent's isolated config dir, where the runtime discovers them.
+  const addons = new AddonStore(
+    {
+      skillsDir: join(dataDir, 'agent-config', 'skills'),
+      pluginsDir: join(dataDir, 'addons', 'plugins'),
+      stateFile: join(dataDir, 'addons', 'addons.json'),
+    },
+    cipher,
+  )
 
   const chats = new ChatRepository(openDatabase(join(dataDir, 'workbench.db')))
   // Files may be served/saved from the data dir and from project folders the user opened.
@@ -102,6 +122,7 @@ function bootstrap(): void {
 
   const sessions = new SessionManager({
     createWebServer: () => createWebMcpServer(web),
+    getAddons: () => addons.agentConfig(),
     getSettings: () => settings.get(),
     secrets,
     chats,
@@ -158,6 +179,44 @@ function bootstrap(): void {
       }
       return { attachments, errors }
     },
+    'chats:export': async ({ chatId, format }) => {
+      const chat = chats.get(chatId)
+      if (!chat || !mainWindow) return { savedTo: null }
+      const result = await dialog.showSaveDialog(mainWindow, {
+        defaultPath: exportFileName(chat.title, format),
+        filters: [
+          format === 'md'
+            ? { name: 'Markdown', extensions: ['md'] }
+            : { name: 'JSON', extensions: ['json'] },
+        ],
+      })
+      if (result.canceled || !result.filePath) return { savedTo: null }
+      writeFileSync(
+        result.filePath,
+        format === 'md' ? chatToMarkdown(chat) : JSON.stringify(chat, null, 2),
+        'utf8',
+      )
+      return { savedTo: result.filePath }
+    },
+    'chats:backup': async () => {
+      if (!mainWindow) return { savedTo: null }
+      const stamp = new Date().toISOString().slice(0, 10)
+      const result = await dialog.showSaveDialog(mainWindow, {
+        defaultPath: `ai-workbench-backup-${stamp}.json`,
+        filters: [{ name: 'JSON', extensions: ['json'] }],
+      })
+      if (result.canceled || !result.filePath) return { savedTo: null }
+      const all = chats.list().flatMap((c) => {
+        const detail = chats.get(c.id)
+        return detail ? [detail] : []
+      })
+      writeFileSync(
+        result.filePath,
+        JSON.stringify({ version: 1, exportedAt: Date.now(), chats: all }, null, 2),
+        'utf8',
+      )
+      return { savedTo: result.filePath }
+    },
     'chats:create-project': ({ chatId, projectPath }) =>
       sessions.createProjectChat({ ...(chatId ? { chatId } : {}), projectPath }),
     'chats:set-permission-mode': async ({ chatId, mode }) => {
@@ -209,6 +268,7 @@ function bootstrap(): void {
       ok: sessions.respondToPermission(requestId, decision, message),
     }),
     ...createProjectHandlers({ getTarget: () => mainWindow?.webContents }),
+    ...createAddonHandlers({ store: addons, getWindow: () => mainWindow }),
   })
 
   app.on('before-quit', () => sessions.cancelAll())

@@ -3,7 +3,7 @@
 Laufendes Protokoll zur Umsetzung von [`PLAN.md`](./PLAN.md).
 Zeiten in UTC. Legende: ✅ fertig · 🔄 in Arbeit · ⏳ offen · ⚠️ Problem/Hinweis
 
-**Letztes Update:** 2026-10-10 10:06
+**Letztes Update:** 2026-10-10 10:22
 
 ## Gesamtstatus
 
@@ -13,26 +13,84 @@ Zeiten in UTC. Legende: ✅ fertig · 🔄 in Arbeit · ⏳ offen · ⚠️ Prob
 | 1     | Chat mit allen Providern   | ✅     | 100 %       |
 | 2     | Coding-Agent               | ✅     | 100 %       |
 | 3     | Internet                   | ✅     | 100 %       |
-| 4     | Medien: Bilder & 3D        | 🔄     | 0 %         |
-| 5     | Skills & Add-ons           | ⏳     | 0 %         |
-| 6     | Feinschliff & Distribution | ⏳     | 0 %         |
+| 4     | Medien: Bilder & 3D        | ✅     | 100 %       |
+| 5     | Skills & Add-ons           | ✅     | 100 %       |
+| 6     | Feinschliff & Distribution | 🔄     | 40 %        |
 
-**Gesamt: ~57 %** (4 von 7 Phasen)
+**Gesamt: ~90 %** (6 von 7 Phasen, Phase 6 begonnen)
 
 ## Teststand
 
 Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
 
-| Prüfung                                                                 | Ergebnis           |
-| ----------------------------------------------------------------------- | ------------------ |
-| TypeScript strict + ESLint                                              | ✅                 |
-| Unit-Tests (Provider, Speicher, Dateien, Freigaben, Diff, Web, Projekt) | ✅ 122             |
-| Integration mit echtem Claude-Runtime (Chat, Bilder, Coding, Websuche)  | ✅ 9               |
-| Live-Test echte Websuche (optional, `AIW_LIVE_WEB=1`)                   | ✅                 |
-| Smoke-Test App: Chat + Anhang, Coding mit Freigabe, Chromium-Loader     | ✅                 |
-| Windows-CI (Tests, Installer, Smoke-Test der installierten App)         | ⚠️ siehe Protokoll |
+| Prüfung                                                                | Ergebnis         |
+| ---------------------------------------------------------------------- | ---------------- |
+| TypeScript strict + ESLint                                             | ✅               |
+| Unit-Tests (21 Dateien)                                                | ✅ 165           |
+| Integration mit echtem Runtime (Chat, Coding, Web, Medien, Add-ons)    | ✅               |
+| Live-Test echte Websuche (optional, `AIW_LIVE_WEB=1`)                  | ✅               |
+| Smoke-Test App: Chat, Coding, Medien/3D, Chromium-Loader + Screenshots | ✅               |
+| Windows-CI                                                             | 🔄 Fixes gepusht |
 
 ## Protokoll
+
+### 2026-10-10 10:22 – Phase 4 und 5 abgeschlossen ✅, Phase 6 begonnen
+
+**Phase 4 – Bilder & 3D**
+
+- **Bilder erzeugen und bearbeiten:** Werkzeug `generate_image` über OpenRouter, mit
+  Eingabebildern zum Bearbeiten und Seitenverhältnis.
+  - Standardmodell ist `google/gemini-3.1-flash-lite-image`; in den Einstellungen lässt sich
+    jedes OpenRouter-Bildmodell auswählen.
+  - Bei reinen Bildmodellen probiert die App automatisch den passenden Modus.
+- **Dateien und 3D-Modelle:** Werkzeug `save_file`. Der Agent schreibt OBJ, STL, PLY, glTF,
+  SVG, HTML, Markdown usw. – kostenlos, als Code.
+- **Anzeige** _(Opus-Subagent)_:
+  - Bild-Viewer mit Zoom und Verschieben
+  - 3D-Viewer mit three.js (GLB, glTF, OBJ+MTL, STL, PLY), Drehen, Drahtgitter, Auto-Rotation
+    und Anzahl der Dreiecke; three.js wird erst bei Bedarf geladen
+  - Erzeugte Dateien erscheinen direkt im Chat, zusätzlich im Panel „Ergebnisse“ (öffnet sich
+    automatisch)
+  - Aktionen: „Speichern unter“, „Im Ordner zeigen“, „Extern öffnen“, „Als Eingabe verwenden“
+  - Das Projekt-Panel zeigt Bilder und 3D-Dateien ebenfalls als Vorschau.
+- **Speicherorte:** Im Chat landen Ergebnisse im Chat-Ordner, beim Coding unter
+  `<Projekt>/ai-output/`.
+- **Sicherheit:** Ausführbare Dateien (.exe, .ps1 usw.) werden nie automatisch geöffnet.
+- **Getestet:**
+  - Der Agent erzeugt über den echten Runtime ein Bild (über einen nachgebauten OpenRouter)
+    und ein 3D-Modell.
+  - Der Screenshot zeigt die gerenderte 3D-Pyramide im Chat.
+
+**Phase 5 – Skills & Add-ons** (Seite „Skills & Add-ons“, UI vom Sonnet-Subagent)
+
+- **Skills** (`SKILL.md`) aus GitHub-Repos installieren, z. B. `anthropics/skills`: Das Repo wird
+  durchsucht, und du wählst aus, was installiert wird.
+- **Plugins** (Claude-Code-Format) aus GitHub oder einem lokalen Ordner.
+- **MCP-Server** aus der offiziellen MCP-Registry (npm, pypi, Remote) oder manuell.
+  Zugangsdaten werden verschlüsselt gespeichert und nie an die Oberfläche geschickt.
+- Alles lässt sich einzeln an- und abschalten. Werkzeuge fremder MCP-Server fragen vor der
+  Nutzung um Erlaubnis, auch im normalen Chat.
+- **Getestet:**
+  - Ein echter MCP-Server läuft im Agenten, mit verschlüsseltem Geheimnis und Freigabe.
+  - Der installierte Skill ist für das Modell sichtbar.
+  - Archive mit unsicheren Pfaden („Zip-Slip“) werden abgelehnt.
+
+**Phase 6 (begonnen)**
+
+- Chat-Suche (Strg+K) und Export als Markdown
+- Backup aller Chats (JSON)
+- Tastenkürzel: Strg+N, Strg+Umschalt+O, Strg+,
+- App-Icon
+- Protokollierung unerwarteter Fehler
+
+**Windows-Fixes aus der CI**
+
+- ⚠️ Kurze 8.3-Pfadnamen (`RUNNER~1`) brachten den Agenten dazu, bei Projektdateien trotzdem
+  nachzufragen. Projektpfade werden jetzt normalisiert.
+- ⚠️ Zwei Terminal-Tests nutzten Linux-Syntax bzw. erwarteten `\n`; sie sind jetzt
+  plattformgerecht.
+- ⚠️ Ohne GPU-Treiber (z. B. in VMs) startete der 3D-Viewer nicht. Jetzt gibt es eine
+  Software-Rendering-Ausweichlösung.
 
 ### 2026-10-10 10:06 – Phase 2 und 3 abgeschlossen ✅
 

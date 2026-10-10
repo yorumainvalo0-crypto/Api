@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useState } from 'react'
-import { MessageSquare, Settings as SettingsIcon } from 'lucide-react'
+import { MessageSquare, Puzzle, Settings as SettingsIcon } from 'lucide-react'
 import type { Settings } from '@shared/schemas/settings'
 import type { ChatSummary } from '@shared/schemas/chat'
 import { api } from './lib/api'
 import { ChatView } from './features/chat/ChatView'
 import { ChatSidebar } from './features/chat/ChatSidebar'
 import { SettingsView } from './features/settings/SettingsView'
+import { AddonsView } from './features/addons/AddonsView'
 
-type View = 'chat' | 'settings'
+type View = 'chat' | 'addons' | 'settings'
 
 export function App() {
   const [view, setView] = useState<View>('chat')
@@ -42,20 +43,54 @@ export function App() {
   }, [refreshChats])
 
   useTheme(settings?.theme ?? 'system')
+  const [focusSearch, setFocusSearch] = useState(0)
 
-  const openProject = async () => {
+  const openProject = useCallback(async () => {
     const projectPath = await api.invoke('dialog:open-folder')
     if (!projectPath) return
     const chat = await api.invoke('chats:create-project', { projectPath })
     refreshChats()
+    setView('chat')
     setActiveChatId(chat.id)
-  }
+  }, [refreshChats])
+
+  // Keyboard shortcuts: Ctrl+N new chat, Ctrl+Shift+O open project, Ctrl+K search, Ctrl+, settings.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey)) return
+      const key = e.key.toLowerCase()
+      if (key === 'n' && !e.shiftKey) {
+        e.preventDefault()
+        setView('chat')
+        setActiveChatId(crypto.randomUUID())
+      } else if (key === 'o' && e.shiftKey) {
+        e.preventDefault()
+        void openProject()
+      } else if (key === 'k') {
+        e.preventDefault()
+        setView('chat')
+        setFocusSearch((n) => n + 1)
+      } else if (key === ',') {
+        e.preventDefault()
+        setView('settings')
+      }
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [openProject])
 
   return (
     <div className="flex h-full">
       <nav className="flex w-14 shrink-0 flex-col items-center gap-2 border-r border-zinc-200 bg-zinc-50 py-3 dark:border-zinc-800 dark:bg-zinc-900">
         <NavButton label="Chat" active={view === 'chat'} onClick={() => setView('chat')}>
           <MessageSquare size={20} />
+        </NavButton>
+        <NavButton
+          label="Skills & Add-ons"
+          active={view === 'addons'}
+          onClick={() => setView('addons')}
+        >
+          <Puzzle size={20} />
         </NavButton>
         <NavButton
           label="Einstellungen"
@@ -74,6 +109,7 @@ export function App() {
               onSelect={setActiveChatId}
               onNew={() => setActiveChatId(crypto.randomUUID())}
               onOpenProject={() => void openProject()}
+              focusSearch={focusSearch}
               onChanged={refreshChats}
             />
             <ChatView
@@ -84,6 +120,8 @@ export function App() {
               onSettingsChange={setSettings}
             />
           </>
+        ) : view === 'addons' ? (
+          <AddonsView />
         ) : (
           <SettingsView settings={settings} onChange={setSettings} />
         )}

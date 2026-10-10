@@ -78,9 +78,9 @@ describe('coding agent (real runtime, scripted model)', () => {
   })
 
   async function run(name: string, mode: AgentPermissionMode, tool: MockTurn['toolUse']) {
-    const project = join(dir, name)
-    mkdirSync(project, { recursive: true })
-    const chat = manager.createProjectChat({ projectPath: project })
+    mkdirSync(join(dir, name), { recursive: true })
+    const chat = manager.createProjectChat({ projectPath: join(dir, name) })
+    const project = chat.projectPath ?? ''
     await manager.setPermissionMode(chat.id, mode)
     nextTool =
       typeof tool?.input['file_path'] === 'string'

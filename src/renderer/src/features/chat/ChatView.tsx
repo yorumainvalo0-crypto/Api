@@ -7,6 +7,7 @@ import {
   File as FileIcon,
   FileText,
   FolderCode,
+  Images,
   PanelRight,
   Paperclip,
   Send,
@@ -29,6 +30,8 @@ import { fileUrl } from '@shared/ipc'
 import { api } from '../../lib/api'
 import { ModelPicker, cleanError } from '../../components/ModelPicker'
 import { ProjectPanel } from '../project/ProjectPanel'
+import { InlineMedia } from '../media/InlineMedia'
+import { OutputsPanel } from '../media/OutputsPanel'
 import { ToolCard } from './ToolCard'
 import { PermissionPrompt, type PermissionRequest } from './PermissionPrompt'
 
@@ -48,7 +51,9 @@ export function ChatView(props: {
   const [pending, setPending] = useState<Attachment[]>([])
   const [notice, setNotice] = useState<string | null>(null)
   const [dragging, setDragging] = useState(false)
-  const [showPanel, setShowPanel] = useState(true)
+  /** Right panel: project tools (code mode) or generated outputs (both modes). */
+  const [panel, setPanel] = useState<'project' | 'outputs' | null>(null)
+  const [outputsVersion, setOutputsVersion] = useState(0)
   const bottomRef = useRef<HTMLDivElement>(null)
 
   const reload = useCallback(async () => {
@@ -78,7 +83,14 @@ export function ChatView(props: {
       switch (event.type) {
         case 'done':
           setPermissions([])
+          setOutputsVersion((v) => v + 1)
           void reload().then(() => setLive(null))
+          return
+        case 'output-file':
+          // Show new results right away.
+          setOutputsVersion((v) => v + 1)
+          setPanel((p) => p ?? 'outputs')
+          setLive((prev) => applyReplyEvent(prev ?? EMPTY_REPLY, event))
           return
         case 'permission-request':
           setPermissions((prev) => [...prev, event])
@@ -170,6 +182,12 @@ export function ChatView(props: {
   }
 
   const isCode = chat?.mode === 'code' && chat.projectPath !== null
+  // Coding chats open with the project panel unless the user chose otherwise.
+  const activePanel = panel ?? (isCode ? 'project' : null)
+
+  const attachOutput = async (path: string) => {
+    await addFiles([{ source: 'path', path }])
+  }
 
   return (
     <div className="flex h-full min-w-0 flex-1">
@@ -230,15 +248,21 @@ export function ChatView(props: {
             {totalCost > 0 ? `Kosten: $${totalCost.toFixed(4)}` : ''}
           </span>
           {isCode && (
-            <button
-              type="button"
-              title="Projekt-Panel ein/aus"
-              onClick={() => setShowPanel((v) => !v)}
-              className="rounded-md p-1 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+            <PanelToggle
+              label="Projekt-Panel"
+              active={activePanel === 'project'}
+              onClick={() => setPanel(activePanel === 'project' ? null : 'project')}
             >
               <PanelRight size={18} />
-            </button>
+            </PanelToggle>
           )}
+          <PanelToggle
+            label="Ergebnisse (Bilder, 3D, Dateien)"
+            active={activePanel === 'outputs'}
+            onClick={() => setPanel(activePanel === 'outputs' ? null : 'outputs')}
+          >
+            <Images size={18} />
+          </PanelToggle>
         </header>
 
         <div className="flex-1 overflow-y-auto">
@@ -257,6 +281,7 @@ export function ChatView(props: {
                 <AssistantBlock
                   key={m.id}
                   parts={m.parts}
+                  onUseAsInput={(path) => void attachOutput(path)}
                   error={m.error}
                   meta={
                     m.durationMs !== null
@@ -331,8 +356,39 @@ export function ChatView(props: {
           </div>
         </div>
       </div>
-      {isCode && showPanel && chat?.projectPath && <ProjectPanel projectPath={chat.projectPath} />}
+      {activePanel === 'project' && chat?.projectPath && (
+        <ProjectPanel projectPath={chat.projectPath} />
+      )}
+      {activePanel === 'outputs' && (
+        <OutputsPanel
+          chatId={chatId}
+          refreshKey={outputsVersion}
+          onUseAsInput={(path) => void attachOutput(path)}
+        />
+      )}
     </div>
+  )
+}
+
+function PanelToggle(props: {
+  label: string
+  active: boolean
+  onClick: () => void
+  children: React.ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      title={props.label}
+      aria-label={props.label}
+      aria-pressed={props.active}
+      onClick={props.onClick}
+      className={`rounded-md p-1 hover:bg-zinc-100 dark:hover:bg-zinc-800 ${
+        props.active ? 'text-blue-600' : 'text-zinc-500'
+      }`}
+    >
+      {props.children}
+    </button>
   )
 }
 
@@ -366,6 +422,7 @@ function UserBubble({ message }: { message: ChatMessage }) {
 
 function AssistantBlock(props: {
   parts: MessagePart[]
+  onUseAsInput?: (path: string) => void
   error: string | null
   meta: string | null
   pending?: boolean
@@ -380,8 +437,17 @@ function AssistantBlock(props: {
               {part.text}
             </Markdown>
           </div>
-        ) : (
+        ) : part.type === 'tool' ? (
           <ToolCard key={part.call.id} call={part.call} running={props.pending === true} />
+        ) : (
+          <InlineMedia
+            key={i}
+            path={part.file.path}
+            name={part.file.name}
+            kind={part.file.kind}
+            mimeType={part.file.mimeType}
+            {...(props.onUseAsInput ? { onUseAsInput: props.onUseAsInput } : {})}
+          />
         ),
       )}
       {!hasContent && props.pending && !props.error && (

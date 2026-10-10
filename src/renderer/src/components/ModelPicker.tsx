@@ -10,6 +10,8 @@ export function ModelPicker(props: {
   value: string
   onChange: (modelId: string) => void
   compact?: boolean
+  /** Restricts the list, e.g. to models that can output images. */
+  filter?: (model: ModelInfo) => boolean
 }) {
   const { provider, value, onChange } = props
   const [models, setModels] = useState<ModelInfo[]>([])
@@ -47,11 +49,12 @@ export function ModelPicker(props: {
 
   const filtered = useMemo(() => {
     const q = filter.trim().toLowerCase()
+    const base = props.filter ? models.filter(props.filter) : models
     const list = q
-      ? models.filter((m) => m.id.toLowerCase().includes(q) || m.label.toLowerCase().includes(q))
-      : models
+      ? base.filter((m) => m.id.toLowerCase().includes(q) || m.label.toLowerCase().includes(q))
+      : base
     return list.slice(0, 200)
-  }, [models, filter])
+  }, [models, filter, props.filter])
 
   const current = models.find((m) => m.id === value)
 

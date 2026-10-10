@@ -94,6 +94,22 @@ export function runSmokeTest(win: BrowserWindow): void {
           const codeChatDetail = await window.api.invoke('chats:get', { chatId: 'smoke-code' })
           result.codeParts = codeChatDetail?.messages.at(-1)?.parts.map((p) => p.type).join(',')
         }
+
+        // Media: the agent saves a 3D model that must show up as output and inline part.
+        const mediaDone = new Promise((resolve) => {
+          const off = window.api.on('agent:event', (e) => {
+            if (e.chatId !== 'smoke-media') return
+            if (e.type === 'error') result.mediaError = e.message
+            if (e.type === 'done') { off(); resolve() }
+          })
+        })
+        await window.api.invoke('agent:send', { chatId: 'smoke-media', prompt: 'SMOKE-MEDIA Pyramide' })
+        await mediaDone
+        const outputs = await window.api.invoke('outputs:list', { chatId: 'smoke-media' })
+        result.outputs = outputs.map((f) => f.name + ':' + f.kind).join(',')
+        const mediaChat = await window.api.invoke('chats:get', { chatId: 'smoke-media' })
+        result.mediaParts = mediaChat?.messages.at(-1)?.parts.map((p) => p.type).join(',')
+        if (outputs[0]) result.outputStatus = (await fetch(toUrl(outputs[0].path))).status
       }
       return result
     })()`
@@ -114,6 +130,10 @@ export function runSmokeTest(win: BrowserWindow): void {
             return fail('file protocol served a file outside data dir')
           if (result['persisted'] !== 'user:1,assistant:0') return fail('chat not persisted')
           if (result['listed'] !== true) return fail('chat missing from list')
+          if (result['mediaError']) return fail(`media error: ${String(result['mediaError'])}`)
+          if (result['outputs'] !== 'pyramide.obj:model3d') return fail('3D output not listed')
+          if (result['mediaParts'] !== 'tool,file,text') return fail('media parts wrong')
+          if (result['outputStatus'] !== 200) return fail('output file not served')
           if (projectPath) {
             if (result['codeError']) return fail(`code error: ${String(result['codeError'])}`)
             if (result['codeParts'] !== 'text,tool,text') return fail('code reply parts wrong')

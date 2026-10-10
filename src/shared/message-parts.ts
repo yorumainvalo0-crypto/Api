@@ -72,6 +72,8 @@ export function applyReplyEvent(state: ReplyState, event: AgentEvent): ReplyStat
             : p,
         ),
       }
+    case 'output-file':
+      return { ...state, parts: [...state.parts, { type: 'file', file: event.file }] }
     case 'result':
       return {
         ...state,

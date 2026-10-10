@@ -18,10 +18,17 @@ export default tseslint.config(
       'src/main/**/*.ts',
       'src/preload/**/*.ts',
       'scripts/**/*.{mjs,ts}',
+      'tests/fixtures/**/*.mjs',
       'tests/**/*.ts',
       '*.config.{js,ts}',
     ],
     languageOptions: { globals: globals.node },
+  },
+  {
+    // CommonJS helper scripts run directly by Electron.
+    files: ['scripts/**/*.cjs'],
+    languageOptions: { globals: globals.node, sourceType: 'commonjs' },
+    rules: { '@typescript-eslint/no-require-imports': 'off' },
   },
   {
     rules: {

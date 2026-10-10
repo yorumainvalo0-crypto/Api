@@ -28,6 +28,22 @@ const mock = await startMockAnthropic((body) => {
           toolUse: { name: 'Write', input: { file_path: PROJECT_FILE, content: 'vom Agenten' } },
         }
   }
+  // Media turn: save a 3D model (a simple pyramid) through the media tools.
+  if (text.includes('SMOKE-MEDIA')) {
+    return userBlocks.some((b) => b.type === 'tool_result')
+      ? { text: 'Hier ist deine Pyramide.' }
+      : {
+          toolUse: {
+            name: 'mcp__media__save_file',
+            input: {
+              file_name: 'pyramide.obj',
+              content:
+                'v 0 0 0\nv 1 0 0\nv 1 0 1\nv 0 0 1\nv 0.5 1 0.5\n' +
+                'f 1 2 3 4\nf 1 2 5\nf 2 3 5\nf 3 4 5\nf 4 1 5\n',
+            },
+          },
+        }
+  }
   // Chat turn: echo how many images reached the API to verify the attachment pipeline.
   return `${MOCK_REPLY} (Bilder: ${userBlocks.filter((b) => b.type === 'image').length})`
 })

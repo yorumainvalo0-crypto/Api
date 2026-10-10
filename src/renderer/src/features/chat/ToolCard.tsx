@@ -6,6 +6,7 @@ import {
   FilePlus,
   FileSearch,
   Globe,
+  Image as ImageIcon,
   ListTodo,
   Loader2,
   Search,
@@ -48,6 +49,19 @@ export function describeTool(call: ToolCall): { icon: React.ReactNode; title: st
     case 'WebFetch':
     case 'WebSearch':
       return { icon: <Globe size={14} />, title: str(input, 'url') || str(input, 'query') }
+    case 'mcp__media__generate_image':
+      return { icon: <ImageIcon size={14} />, title: `Erzeugt Bild: ${str(input, 'prompt')}` }
+    case 'mcp__media__save_file':
+      return { icon: <FilePlus size={14} />, title: `Speichert ${str(input, 'file_name')}` }
+    case 'mcp__web__web_search':
+      return { icon: <Search size={14} />, title: `Websuche: ${str(input, 'query')}` }
+    case 'mcp__web__web_fetch':
+      return { icon: <Globe size={14} />, title: `Liest ${str(input, 'url')}` }
+    case 'Skill':
+      return {
+        icon: <Wrench size={14} />,
+        title: `Skill: ${str(input, 'skill') || str(input, 'command')}`,
+      }
     case 'TodoWrite':
       return { icon: <ListTodo size={14} />, title: 'Aufgabenliste aktualisiert' }
     default:

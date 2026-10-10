@@ -40,10 +40,21 @@ export const ToolCallSchema = z.object({
 })
 export type ToolCall = z.infer<typeof ToolCallSchema>
 
-/** Ordered content of an assistant message: text interleaved with tool calls. */
+/** A file the agent produced during the reply (image, 3D model, document). */
+export const ProducedFileSchema = z.object({
+  name: z.string(),
+  path: z.string(),
+  kind: AttachmentKindSchema,
+  mimeType: z.string(),
+  size: z.number(),
+})
+export type ProducedFile = z.infer<typeof ProducedFileSchema>
+
+/** Ordered content of an assistant message: text interleaved with tool calls and files. */
 export const MessagePartSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('text'), text: z.string() }),
   z.object({ type: z.literal('tool'), call: ToolCallSchema }),
+  z.object({ type: z.literal('file'), file: ProducedFileSchema }),
 ])
 export type MessagePart = z.infer<typeof MessagePartSchema>
 

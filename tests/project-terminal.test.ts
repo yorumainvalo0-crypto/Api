@@ -54,7 +54,8 @@ describe('TerminalRunner', () => {
     const { runId } = await runner.run(dir, 'echo hallo')
     const exit = await waitForExit(runId)
     expect(exit.exitCode).toBe(0)
-    expect(output(runId, 'stdout')).toBe('hallo\n')
+    // PowerShell ends lines with CRLF.
+    expect(output(runId, 'stdout').replace(/\r\n/g, '\n')).toBe('hallo\n')
   })
 
   it('runs in the project folder', async () => {
@@ -64,10 +65,14 @@ describe('TerminalRunner', () => {
   })
 
   it('reports non-zero exit codes and stderr', async () => {
-    const { runId } = await runner.run(dir, 'echo kaputt >&2; exit 3')
+    const command =
+      process.platform === 'win32'
+        ? "[Console]::Error.WriteLine('kaputt'); exit 3"
+        : 'echo kaputt >&2; exit 3'
+    const { runId } = await runner.run(dir, command)
     const exit = await waitForExit(runId)
     expect(exit.exitCode).toBe(3)
-    expect(output(runId, 'stderr')).toBe('kaputt\n')
+    expect(output(runId, 'stderr').replace(/\r\n/g, '\n')).toBe('kaputt\n')
   })
 
   it('kills a long-running process tree', async () => {

@@ -1,4 +1,4 @@
-import { mkdirSync, statSync } from 'node:fs'
+import { mkdirSync, realpathSync, statSync } from 'node:fs'
 import { join } from 'node:path'
 import {
   query,
@@ -19,6 +19,9 @@ import { buildProviderRuntime } from './providers'
 import { normalizeSdkMessage, type SdkMessageLike } from './normalize'
 import { dangerousCommandHook, PermissionBroker } from './permissions'
 import { WEB_MCP_SERVER, WEB_TOOL_NAMES } from '../web/mcp-server'
+import { createMediaMcpServer, MEDIA_MCP_SERVER, MEDIA_TOOL_NAMES } from '../media/mcp-server'
+import { outputsDir } from '../media/outputs'
+import type { AgentAddonConfig } from '../addons/addon-store'
 
 export interface SessionManagerDeps {
   getSettings: () => Settings
@@ -31,6 +34,10 @@ export interface SessionManagerDeps {
   emit: (event: AgentEvent) => void
   /** Creates the in-process web tools server (one instance per run). */
   createWebServer?: () => McpSdkServerConfigWithInstance
+  /** fetch used for image generation (tests inject a fake OpenRouter). */
+  mediaFetch?: typeof fetch
+  /** Enabled skills, plugins and MCP servers. */
+  getAddons?: () => AgentAddonConfig
 }
 
 interface ActiveRun {
@@ -48,6 +55,8 @@ const CODE_SYSTEM_APPEND = [
   'You are running inside the "AI Workbench" desktop app on the user\'s own machine.',
   'Reply to the user in their language (usually German). Keep code, identifiers and code',
   'comments in English. The user sees your tool calls and file diffs in the app.',
+  'Use mcp__media__generate_image to create or edit images (saved to ./ai-output and shown to',
+  'the user). 3D models (.obj/.stl/.ply/.gltf/.glb) in the project can be previewed in the app.',
 ].join('\n')
 
 export function chatWorkspace(dataDir: string, chatId: string): string {
@@ -80,16 +89,19 @@ export class SessionManager {
     if (!statSync(args.projectPath, { throwIfNoEntry: false })?.isDirectory()) {
       throw new SessionError(`Projektordner nicht gefunden: ${args.projectPath}`)
     }
+    // Canonical long path: Windows 8.3 short names (e.g. RUNNER~1) would otherwise make the agent
+    // treat files in the project as outside its working directory.
+    const projectPath = realpathSync.native(args.projectPath)
     const settings = this.deps.getSettings()
     const provider = settings.activeProvider
-    const name = args.projectPath.split(/[\\/]/).filter(Boolean).at(-1) ?? args.projectPath
+    const name = projectPath.split(/[\\/]/).filter(Boolean).at(-1) ?? projectPath
     return this.deps.chats.create({
       ...(args.chatId ? { id: args.chatId } : {}),
       title: `💻 ${name}`,
       provider,
       model: settings.models[provider] || 'Standard',
       mode: 'code',
-      projectPath: args.projectPath,
+      projectPath,
       permissionMode: 'default',
     })
   }
@@ -176,6 +188,22 @@ export class SessionManager {
       const resume = chats.getSdkSessionId(chatId)
       const web =
         settings.webAccess && this.deps.createWebServer ? this.deps.createWebServer() : undefined
+      const media = createMediaMcpServer({
+        outputsDir: outputsDir(dataDir, chat),
+        readableRoots: [
+          chatWorkspace(dataDir, chatId),
+          ...(chat.projectPath ? [chat.projectPath] : []),
+        ],
+        getImageConfig: () => ({
+          apiKey: this.deps.secrets.get('openrouter'),
+          model: this.deps.getSettings().imageModel,
+        }),
+        onFile: (file) => emit({ chatId, type: 'output-file', file }),
+        ...(this.deps.mediaFetch ? { fetchImpl: this.deps.mediaFetch } : {}),
+      })
+      const addons = this.deps.getAddons?.() ?? { mcpServers: {}, plugins: [], skills: [] }
+      // Tools that only read the web, create files for the user or load skills never need approval.
+      const autoAllowed = [...(web ? WEB_TOOL_NAMES : []), ...MEDIA_TOOL_NAMES, 'Skill']
       const common: Options = {
         cwd,
         env: runtime.env,
@@ -185,7 +213,15 @@ export class SessionManager {
         persistSession: true,
         ...(runtime.model ? { model: runtime.model } : {}),
         ...(resume ? { resume } : {}),
-        ...(web ? { mcpServers: { [WEB_MCP_SERVER]: web } } : {}),
+        mcpServers: {
+          ...addons.mcpServers,
+          [MEDIA_MCP_SERVER]: media,
+          ...(web ? { [WEB_MCP_SERVER]: web } : {}),
+        },
+        plugins: addons.plugins,
+        allowedTools: autoAllowed,
+        // Tools from user-installed MCP servers and plugins ask for approval.
+        canUseTool: this.permissions.canUseTool(chatId),
         // Our own free web tools replace the built-in ones (which need Anthropic-hosted services).
         disallowedTools: ['WebSearch', 'WebFetch'],
       }
@@ -193,26 +229,32 @@ export class SessionManager {
         ? {
             ...common,
             tools: { type: 'preset', preset: 'claude_code' },
-            // Loads the project's CLAUDE.md and .claude/settings.json.
-            settingSources: ['project'],
+            // user = installed skills (isolated config dir); project = CLAUDE.md, .claude/settings.json.
+            settingSources: ['user', 'project'],
+            skills: 'all',
             systemPrompt: { type: 'preset', preset: 'claude_code', append: CODE_SYSTEM_APPEND },
             permissionMode: chat.permissionMode,
             ...(chat.permissionMode === 'bypassPermissions'
               ? { allowDangerouslySkipPermissions: true }
               : {}),
-            // Reading the web is harmless, so it never needs approval.
-            ...(web ? { allowedTools: WEB_TOOL_NAMES } : {}),
-            canUseTool: this.permissions.canUseTool(chatId),
             hooks: { PreToolUse: [dangerousCommandHook()] },
           }
         : {
             ...common,
-            tools: [],
-            settingSources: [],
-            systemPrompt: web
-              ? `${CHAT_SYSTEM_PROMPT}\nDu hast Internetzugriff über web_search und web_fetch. Nutze ihn für aktuelle Informationen und nenne die Quellen-URLs.`
-              : CHAT_SYSTEM_PROMPT,
-            ...(web ? { allowedTools: WEB_TOOL_NAMES } : {}),
+            // No built-in file/shell tools in chat mode; installed skills stay available.
+            tools: addons.skills.length > 0 ? ['Skill'] : [],
+            settingSources: addons.skills.length > 0 ? ['user'] : [],
+            ...(addons.skills.length > 0 ? { skills: addons.skills } : {}),
+            permissionMode: 'default',
+            systemPrompt: [
+              CHAT_SYSTEM_PROMPT,
+              web
+                ? 'Du hast Internetzugriff über web_search und web_fetch. Nutze ihn für aktuelle Informationen und nenne die Quellen-URLs.'
+                : '',
+              'Mit generate_image erzeugst oder bearbeitest du Bilder, mit save_file speicherst du Dateien für den Nutzer – auch 3D-Modelle (.obj, .stl, .ply, .gltf), die die App interaktiv anzeigt.',
+            ]
+              .filter(Boolean)
+              .join('\n'),
           }
 
       const blocks = buildPromptBlocks(request.prompt, attachments, { pdf: provider !== 'ollama' })

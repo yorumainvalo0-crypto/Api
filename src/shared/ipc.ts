@@ -15,6 +15,7 @@ import {
 } from './schemas/chat'
 import { ConnectionTestResultSchema, ModelInfoSchema } from './schemas/models'
 import { projectContract, projectEvents } from './ipc-project'
+import { addonsContract } from './ipc-addons'
 import { OutputFileSchema } from './schemas/media'
 
 const ChatIdInput = z.object({ chatId: z.string().min(1) })
@@ -56,6 +57,13 @@ export const ipcContract = {
     output: z.object({ ok: z.boolean() }),
   },
   'chats:delete': { input: ChatIdInput, output: z.object({ ok: z.boolean() }) },
+  /** Saves one chat as Markdown or JSON via a save dialog. */
+  'chats:export': {
+    input: ChatIdInput.extend({ format: z.enum(['md', 'json']) }),
+    output: z.object({ savedTo: z.string().nullable() }),
+  },
+  /** Saves a JSON backup of all chats via a save dialog. */
+  'chats:backup': { input: z.void(), output: z.object({ savedTo: z.string().nullable() }) },
   'chats:create-project': {
     input: z.object({ chatId: z.string().min(1).optional(), projectPath: z.string().min(1) }),
     output: ChatSummarySchema,
@@ -95,6 +103,7 @@ export const ipcContract = {
     output: z.object({ ok: z.boolean() }),
   },
   ...projectContract,
+  ...addonsContract,
 } as const
 
 export type IpcContract = typeof ipcContract

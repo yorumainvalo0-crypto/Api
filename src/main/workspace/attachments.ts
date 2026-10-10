@@ -120,7 +120,8 @@ export function classify(fileName: string, mimeType: string): AttachmentKind {
 // eslint-disable-next-line no-control-regex -- control characters are intentionally matched
 const UNSAFE_FILE_CHARS = /[<>:"/\\|?*\u0000-\u001f]/g
 
-function sanitizeName(name: string): string {
+/** Safe single file name: no path parts, no characters Windows forbids. */
+export function sanitizeName(name: string): string {
   const cleaned = basename(name).replace(UNSAFE_FILE_CHARS, '_').trim()
   return cleaned.slice(0, 120) || 'datei'
 }

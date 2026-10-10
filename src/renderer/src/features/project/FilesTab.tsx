@@ -4,10 +4,20 @@ import type { DirEntry, FileContent } from '@shared/schemas/project'
 import { api } from '../../lib/api'
 import { cleanError } from '../../components/ModelPicker'
 import { formatSize, highlightCode } from './highlight'
+import { FilePreview } from '../media/FilePreview'
+import { guessMimeType, joinPath, mediaPreviewForName } from '../media/media-utils'
 
 type OpenFile =
   | { relPath: string; data: FileContent; error: null }
   | { relPath: string; data: null; error: string | null }
+
+/** Image or 3D model shown with the media viewer instead of the text viewer. */
+interface MediaFile {
+  relPath: string
+  kind: 'image' | 'model3d'
+  /** Bumped on refresh to reload the preview. */
+  version: number
+}
 
 /** Lazy-expanding file tree with a read-only, syntax-highlighted viewer. */
 export function FilesTab(props: { projectPath: string }) {
@@ -17,6 +27,7 @@ export function FilesTab(props: { projectPath: string }) {
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [openFile, setOpenFile] = useState<OpenFile | null>(null)
+  const [mediaFile, setMediaFile] = useState<MediaFile | null>(null)
 
   const loadDir = useCallback(
     async (relPath: string) => {
@@ -70,6 +81,13 @@ export function FilesTab(props: { projectPath: string }) {
   }
 
   const open = (entry: DirEntry) => {
+    const mediaKind = mediaPreviewForName(entry.name)
+    if (mediaKind) {
+      setOpenFile(null)
+      setMediaFile({ relPath: entry.relPath, kind: mediaKind, version: 0 })
+      return
+    }
+    setMediaFile(null)
     setOpenFile({ relPath: entry.relPath, data: null, error: null })
     void loadFile(entry.relPath)
   }
@@ -93,6 +111,7 @@ export function FilesTab(props: { projectPath: string }) {
       )
     }
     if (openFile) await loadFile(openFile.relPath)
+    if (mediaFile) setMediaFile({ ...mediaFile, version: mediaFile.version + 1 })
     setRefreshing(false)
   }
 
@@ -102,7 +121,7 @@ export function FilesTab(props: { projectPath: string }) {
     if (list.length === 0) return <TreeHint depth={depth}>(leer)</TreeHint>
     return list.map((entry) => {
       const isOpen = expanded.has(entry.relPath)
-      const active = openFile?.relPath === entry.relPath
+      const active = (openFile ?? mediaFile)?.relPath === entry.relPath
       return (
         <Fragment key={entry.relPath}>
           <button
@@ -158,11 +177,18 @@ export function FilesTab(props: { projectPath: string }) {
       </div>
       {error && <p className="px-3 py-2 text-xs text-red-600 dark:text-red-400">{error}</p>}
       <div
-        className={`overflow-y-auto py-1 ${openFile ? 'max-h-[40%] min-h-24 shrink-0 border-b border-zinc-200 dark:border-zinc-800' : 'min-h-0 flex-1'}`}
+        className={`overflow-y-auto py-1 ${openFile || mediaFile ? 'max-h-[40%] min-h-24 shrink-0 border-b border-zinc-200 dark:border-zinc-800' : 'min-h-0 flex-1'}`}
       >
         {renderDir('', 0)}
       </div>
       {openFile && <FileViewer file={openFile} onClose={() => setOpenFile(null)} />}
+      {mediaFile && (
+        <MediaViewer
+          projectPath={projectPath}
+          file={mediaFile}
+          onClose={() => setMediaFile(null)}
+        />
+      )}
     </div>
   )
 }
@@ -171,6 +197,31 @@ function TreeHint(props: { depth: number; children: ReactNode }) {
   return (
     <div style={{ paddingLeft: 26 + props.depth * 14 }} className="py-0.5 text-xs text-zinc-400">
       {props.children}
+    </div>
+  )
+}
+
+function MediaViewer(props: { projectPath: string; file: MediaFile; onClose: () => void }) {
+  const { file } = props
+  const name = file.relPath.split('/').pop() ?? file.relPath
+  const path = joinPath(props.projectPath, file.relPath)
+  return (
+    <div className="flex min-h-0 flex-1 flex-col">
+      <FilePreview
+        key={`${path}#${file.version}`}
+        file={{ path, name, kind: file.kind, mimeType: guessMimeType(name) }}
+        toolbarExtra={
+          <button
+            type="button"
+            title="Schließen"
+            aria-label="Schließen"
+            onClick={props.onClose}
+            className="rounded p-0.5 text-zinc-500 hover:bg-zinc-100 dark:hover:bg-zinc-800"
+          >
+            <X size={14} />
+          </button>
+        }
+      />
     </div>
   )
 }

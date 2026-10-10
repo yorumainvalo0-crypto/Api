@@ -6,21 +6,26 @@ import {
   type SecretStatus,
   type Settings,
 } from '@shared/schemas/settings'
+import type { ModelInfo } from '@shared/schemas/models'
 import { api } from '../../lib/api'
 import { ModelPicker, cleanError } from '../../components/ModelPicker'
 
 const PROVIDERS = ProviderIdSchema.options
 
+const imageCapable = (m: ModelInfo) => m.outputModalities.includes('image')
+
 export function SettingsView(props: { settings: Settings; onChange: (s: Settings) => void }) {
   const { settings, onChange } = props
   const [secrets, setSecrets] = useState<SecretStatus | null>(null)
   const [info, setInfo] = useState<string>('')
+  const [dataDir, setDataDir] = useState('')
 
   useEffect(() => {
     void api.invoke('secrets:status').then(setSecrets)
-    void api
-      .invoke('app:info')
-      .then((i) => setInfo(`v${i.version} · ${i.platform} · Agent SDK ${i.agentSdkVersion}`))
+    void api.invoke('app:info').then((i) => {
+      setInfo(`v${i.version} · ${i.platform} · Agent SDK ${i.agentSdkVersion}`)
+      setDataDir(i.dataDir)
+    })
   }, [])
 
   const update = async (patch: Partial<Settings>) =>
@@ -78,6 +83,29 @@ export function SettingsView(props: { settings: Settings; onChange: (s: Settings
           </label>
           <p className="text-xs text-zinc-500">
             Suche über DuckDuckGo bzw. Bing, Seiten werden lokal im eingebauten Chromium geladen.
+          </p>
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="font-medium">Bildgenerierung</h2>
+          <p className="text-xs text-zinc-500">
+            Bilder werden über OpenRouter erzeugt (benötigt den OpenRouter-Key). Gilt für Chat und
+            Coding.
+          </p>
+          <ModelPicker
+            provider="openrouter"
+            value={settings.imageModel}
+            onChange={(model) => void update({ imageModel: model })}
+            filter={imageCapable}
+          />
+        </section>
+
+        <section className="space-y-2">
+          <h2 className="font-medium">Daten</h2>
+          <BackupButton />
+          <p className="text-xs text-zinc-500">
+            Speicherort: {dataDir || '…'} · Tastenkürzel: Strg+N neuer Chat, Strg+Umschalt+O Projekt
+            öffnen, Strg+K Chats suchen, Strg+, Einstellungen
           </p>
         </section>
 
@@ -220,5 +248,29 @@ function ProviderSection(props: {
       )}
       {error && <p className="text-sm text-red-600">{error}</p>}
     </section>
+  )
+}
+
+function BackupButton() {
+  const [message, setMessage] = useState<string | null>(null)
+  const backup = async () => {
+    try {
+      const { savedTo } = await api.invoke('chats:backup')
+      setMessage(savedTo ? `Gespeichert: ${savedTo}` : null)
+    } catch (e) {
+      setMessage(cleanError(e))
+    }
+  }
+  return (
+    <div className="flex items-center gap-3 text-sm">
+      <button
+        type="button"
+        onClick={() => void backup()}
+        className="rounded-md border border-zinc-300 px-3 py-1 dark:border-zinc-700"
+      >
+        Backup aller Chats speichern …
+      </button>
+      {message && <span className="text-xs text-zinc-500">{message}</span>}
+    </div>
   )
 }

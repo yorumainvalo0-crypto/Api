@@ -1,5 +1,5 @@
-import { useState } from 'react'
-import { FolderOpen, Pencil, Plus, Trash2 } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Download, FolderOpen, Pencil, Plus, Search, Trash2 } from 'lucide-react'
 import type { ChatSummary } from '@shared/schemas/chat'
 import { api } from '../../lib/api'
 
@@ -10,9 +10,23 @@ export function ChatSidebar(props: {
   onNew: () => void
   onOpenProject: () => void
   onChanged: () => void
+  /** Incremented to move the keyboard focus into the search box. */
+  focusSearch?: number
 }) {
   const [editing, setEditing] = useState<string | null>(null)
   const [title, setTitle] = useState('')
+  const [query, setQuery] = useState('')
+  const searchRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    if (props.focusSearch) searchRef.current?.focus()
+  }, [props.focusSearch])
+
+  const q = query.trim().toLowerCase()
+  const visible = q ? props.chats.filter((c) => c.title.toLowerCase().includes(q)) : props.chats
+
+  const exportChat = (chat: ChatSummary) =>
+    void api.invoke('chats:export', { chatId: chat.id, format: 'md' })
 
   const commitRename = async (id: string) => {
     if (title.trim()) await api.invoke('chats:rename', { chatId: id, title })
@@ -44,9 +58,23 @@ export function ChatSidebar(props: {
         >
           <FolderOpen size={16} /> Projekt öffnen (Coding)
         </button>
+        <label className="mt-2 flex items-center gap-2 rounded-md border border-zinc-200 px-2 dark:border-zinc-800">
+          <Search size={14} className="text-zinc-400" />
+          <input
+            ref={searchRef}
+            value={query}
+            placeholder="Chats durchsuchen (Strg+K)"
+            onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Escape') setQuery('')
+              if (e.key === 'Enter' && visible[0]) props.onSelect(visible[0].id)
+            }}
+            className="min-w-0 flex-1 bg-transparent py-1.5 text-sm outline-none"
+          />
+        </label>
       </div>
       <ul className="flex-1 overflow-y-auto px-2 pb-2 text-sm">
-        {props.chats.map((chat) => (
+        {visible.map((chat) => (
           <li key={chat.id} className="group">
             {editing === chat.id ? (
               <input
@@ -86,6 +114,14 @@ export function ChatSidebar(props: {
                   className="hidden p-1 text-zinc-500 group-hover:block"
                 >
                   <Pencil size={14} />
+                </button>
+                <button
+                  type="button"
+                  title="Als Markdown exportieren"
+                  onClick={() => exportChat(chat)}
+                  className="hidden p-1 text-zinc-500 group-hover:block"
+                >
+                  <Download size={14} />
                 </button>
                 <button
                   type="button"

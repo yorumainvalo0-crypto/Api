@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { AttachmentSchema } from './chat'
+import { AttachmentSchema, ProducedFileSchema } from './chat'
 
 export const ChatRequestSchema = z.object({
   chatId: z.string().min(1),
@@ -43,6 +43,7 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
     blockedPath: z.string().nullable(),
   }),
   z.object({ ...base, type: z.literal('permission-resolved'), requestId: z.string() }),
+  z.object({ ...base, type: z.literal('output-file'), file: ProducedFileSchema }),
   z.object({
     ...base,
     type: z.literal('result'),
