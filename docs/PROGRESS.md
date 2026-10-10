@@ -3,7 +3,7 @@
 Laufendes Protokoll zur Umsetzung von [`PLAN.md`](./PLAN.md).
 Zeiten in UTC. Legende: ✅ fertig · 🔄 in Arbeit · ⏳ offen · ⚠️ Problem/Hinweis
 
-**Letztes Update:** 2026-10-10 13:35
+**Letztes Update:** 2026-10-10 13:45
 
 ## Gesamtstatus
 
@@ -69,6 +69,7 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
     - Die Handschrift wird über ein nachgebautes Ollama erkannt, das Modell wird danach
       sofort entladen.
   - Gesamt: 243 Tests, Smoke-Test OK.
+- **Windows-CI grün** (Tests, Installer, Smoke-Test der installierten App) → nach `main` gepusht.
 
 ### 2026-10-10 11:07 – Veröffentlicht auf `main` ✅
 
