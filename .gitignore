@@ -8,3 +8,6 @@ coverage/
 .env
 .env.*
 *.tsbuildinfo
+
+# Temporary agent worktrees
+.claude/worktrees/

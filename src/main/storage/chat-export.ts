@@ -33,6 +33,8 @@ export function chatToMarkdown(chat: ChatDetail): string {
     for (const part of m.parts) {
       if (part.type === 'text') lines.push(part.text, '')
       else if (part.type === 'tool') lines.push(toolSummary(part), '')
+      else if (part.type === 'route')
+        lines.push(`> 🧭 Cowork: ${part.route.roleName} (${part.route.model || 'Standard'})`, '')
       else lines.push(`🖼️ Datei: ${part.file.name} (${part.file.path})`, '')
     }
     if (m.error) lines.push(`> ⚠️ Fehler: ${m.error}`, '')

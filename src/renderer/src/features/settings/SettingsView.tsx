@@ -13,6 +13,7 @@ import { ImageGenerationSection } from './ImageGenerationSection'
 import { LocalServicesSection } from './LocalServicesSection'
 import { OcrSection } from './OcrSection'
 import { JevSection } from './JevSection'
+import { CoworkSection } from './CoworkSection'
 
 const PROVIDERS = ProviderIdSchema.options
 
@@ -79,6 +80,8 @@ export function SettingsView(props: { settings: Settings; onChange: (s: Settings
           onSecrets={setSecrets}
           onUpdate={update}
         />
+
+        <CoworkSection settings={settings} secrets={secrets} onUpdate={update} />
 
         <section className="space-y-2">
           <h2 className="font-medium">Internet</h2>

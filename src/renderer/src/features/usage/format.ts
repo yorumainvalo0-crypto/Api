@@ -1,4 +1,4 @@
-import type { ProviderId } from '@shared/schemas/settings'
+import type { UsageProvider } from '@shared/schemas/usage'
 
 /** 950 → "950", 12_345 → "12,3 Tsd.", 4_200_000 → "4,2 Mio." */
 export function formatTokens(n: number): string {
@@ -22,8 +22,27 @@ export function formatUsd(n: number): string {
   return `$${n.toFixed(2)}`
 }
 
-export const PROVIDER_COLORS: Record<ProviderId, string> = {
+export const PROVIDER_COLORS: Record<UsageProvider, string> = {
   anthropic: 'bg-orange-500',
   openrouter: 'bg-violet-500',
   ollama: 'bg-emerald-500',
+  typesafe: 'bg-sky-500',
+}
+
+export const USAGE_PROVIDER_LABELS: Record<UsageProvider, string> = {
+  anthropic: 'Anthropic',
+  openrouter: 'OpenRouter',
+  ollama: 'Ollama (local)',
+  typesafe: 'TypeSafe (Jev)',
+}
+
+/** German label for the agent column of the usage log. */
+export function agentLabel(agent: string): string {
+  if (agent === 'main') return 'Hauptagent'
+  if (agent === 'router') return 'Cowork-Router (Jev)'
+  if (agent === 'jev') return 'Jev-Werkzeug'
+  if (agent === 'terminal') return 'Terminal (Claude Code)'
+  if (agent.startsWith('subagent:')) return `Subagent „${agent.slice('subagent:'.length)}“`
+  if (agent.startsWith('cowork:')) return `Cowork „${agent.slice('cowork:'.length)}“`
+  return agent
 }

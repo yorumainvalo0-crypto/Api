@@ -24,6 +24,55 @@ export const EFFORT_LABELS: Record<Effort, string> = {
   max: 'Maximum',
 }
 
+/** A model setup the Cowork mode can route a request to or hand subtasks to. */
+export const CoworkRoleSchema = z.object({
+  id: z.string().regex(/^[a-z0-9-]{1,32}$/, 'Nur Kleinbuchstaben, Ziffern und Bindestriche'),
+  name: z.string().trim().min(1).max(40),
+  /** What the role is good at – Jev and the coordinating model decide based on this. */
+  description: z.string().trim().min(1).max(500),
+  provider: ProviderIdSchema,
+  /** Model id; empty = provider default. */
+  model: z.string().max(200),
+  effort: EffortSchema,
+})
+export type CoworkRole = z.infer<typeof CoworkRoleSchema>
+
+export const DEFAULT_COWORK_ROLES: CoworkRole[] = [
+  {
+    id: 'schnell',
+    name: 'Schnell',
+    description:
+      'Kurze Fragen, Fakten, Übersetzungen, Umformulieren, einfache Zusammenfassungen und kleine Recherchen.',
+    provider: 'anthropic',
+    model: 'claude-haiku-5-5',
+    effort: 'low',
+  },
+  {
+    id: 'standard',
+    name: 'Standard',
+    description:
+      'Normale Aufgaben: Erklärungen, Texte schreiben, Dokumente erstellen, Code lesen und mittelgroße Änderungen.',
+    provider: 'anthropic',
+    model: 'claude-sonnet-5-5',
+    effort: 'medium',
+  },
+  {
+    id: 'experte',
+    name: 'Experte',
+    description:
+      'Schwierige Aufgaben: Architektur und Planung, komplexe Fehler, große Refactorings, lange Analysen und kritische Prüfungen.',
+    provider: 'anthropic',
+    model: 'claude-opus-5-5',
+    effort: 'high',
+  },
+]
+
+const CoworkRolesSchema = z
+  .array(CoworkRoleSchema)
+  .min(1)
+  .max(12)
+  .refine((roles) => new Set(roles.map((r) => r.id)).size === roles.length, 'Doppelte Rollen-ID')
+
 export const PROVIDER_LABELS: Record<ProviderId, string> = {
   anthropic: 'Anthropic',
   openrouter: 'OpenRouter',
@@ -68,6 +117,13 @@ export const SettingsSchema = z.object({
   ocrKeepAliveSec: z.number().int().min(0).max(3600).default(60),
   /** How hard Claude thinks: higher is more thorough, slower and more expensive. */
   effort: EffortSchema.default('default'),
+  /** Cowork: Jev routes each request to a role; the model can hand subtasks to other roles. */
+  coworkEnabled: z.boolean().default(false),
+  coworkRoles: CoworkRolesSchema.default(DEFAULT_COWORK_ROLES),
+  /** Role used when Jev is not available. */
+  coworkDefaultRole: z.string().default('standard'),
+  /** Let the coordinating model start subagents (other roles) for subtasks. */
+  coworkSubagents: z.boolean().default(true),
   /** Offer the Jev decision model (TypeSafe) as a tool to every chat model when a key exists. */
   jevEnabled: z.boolean().default(true),
   jevSource: JevSourceSchema.default('typesafe'),
@@ -106,6 +162,10 @@ export const SettingsPatchSchema = z
     ocrBaseUrl: z.union([z.literal(''), z.url()]),
     ocrKeepAliveSec: z.number().int().min(0).max(3600),
     effort: EffortSchema,
+    coworkEnabled: z.boolean(),
+    coworkRoles: CoworkRolesSchema,
+    coworkDefaultRole: z.string(),
+    coworkSubagents: z.boolean(),
     jevEnabled: z.boolean(),
     jevSource: JevSourceSchema,
     jevModel: z.string().max(200),

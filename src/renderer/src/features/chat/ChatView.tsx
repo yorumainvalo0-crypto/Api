@@ -12,6 +12,7 @@ import {
   Paperclip,
   Send,
   Square,
+  Users,
   X,
 } from 'lucide-react'
 import {
@@ -36,6 +37,7 @@ import { fileUrl } from '@shared/ipc'
 import { api } from '../../lib/api'
 import { ModelPicker, cleanError } from '../../components/ModelPicker'
 import { ContextMeter } from '../usage/ContextMeter'
+import { RouteBadge } from './RouteBadge'
 import { ProjectPanel } from '../project/ProjectPanel'
 import { InlineMedia } from '../media/InlineMedia'
 import { OutputsPanel } from '../media/OutputsPanel'
@@ -186,6 +188,12 @@ export function ChatView(props: {
   const setEffort = async (effort: Effort) =>
     props.onSettingsChange(await api.invoke('settings:update', { effort }))
 
+  const toggleCowork = async () =>
+    props.onSettingsChange(
+      await api.invoke('settings:update', { coworkEnabled: !settings.coworkEnabled }),
+    )
+  const cowork = settings.coworkEnabled
+
   const setPermissionMode = async (mode: AgentPermissionMode) => {
     await api.invoke('chats:set-permission-mode', { chatId, mode })
     setChat((c) => (c ? { ...c, permissionMode: mode } : c))
@@ -222,15 +230,39 @@ export function ChatView(props: {
 
         <header className="flex flex-wrap items-center gap-3 border-b border-zinc-200 px-4 py-2 dark:border-zinc-800">
           <span className="text-sm text-zinc-500">{PROVIDER_LABELS[provider]}</span>
-          <ModelPicker
-            key={provider}
-            provider={provider}
-            value={settings.models[provider]}
-            onChange={(m) => void setModel(m)}
-            compact
-          />
+          <button
+            type="button"
+            onClick={() => void toggleCowork()}
+            disabled={running}
+            title={
+              cowork
+                ? 'Cowork an: Jev wählt pro Anfrage Rolle, Modell und Effort; Subagents übernehmen Teilaufgaben. Rollen unter Einstellungen → Cowork.'
+                : 'Cowork einschalten: Jev verteilt Anfragen auf deine Rollen (Modelle + Effort) und Subagents.'
+            }
+            className={`flex items-center gap-1 rounded-md border px-2 py-1 text-sm disabled:opacity-50 ${
+              cowork
+                ? 'border-violet-500 bg-violet-500/15 text-violet-700 dark:text-violet-300'
+                : 'border-zinc-300 text-zinc-500 dark:border-zinc-700'
+            }`}
+          >
+            <Users size={14} /> Cowork
+          </button>
+          {cowork ? (
+            <span className="text-xs text-zinc-500">
+              {settings.coworkRoles.map((r) => r.name).join(' · ')}
+            </span>
+          ) : (
+            <ModelPicker
+              key={provider}
+              provider={provider}
+              value={settings.models[provider]}
+              onChange={(m) => void setModel(m)}
+              compact
+            />
+          )}
           <select
             value={provider === 'ollama' ? 'default' : settings.effort}
+            hidden={cowork}
             disabled={provider === 'ollama' || running}
             title={
               provider === 'ollama'
@@ -469,6 +501,8 @@ function AssistantBlock(props: {
           </div>
         ) : part.type === 'tool' ? (
           <ToolCard key={part.call.id} call={part.call} running={props.pending === true} />
+        ) : part.type === 'route' ? (
+          <RouteBadge key={i} route={part.route} />
         ) : (
           <InlineMedia
             key={i}

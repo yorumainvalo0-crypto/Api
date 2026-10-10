@@ -1,6 +1,6 @@
 import { z } from 'zod'
 import { ContextUsageSchema } from './usage'
-import { AttachmentSchema, ProducedFileSchema } from './chat'
+import { AttachmentSchema, ProducedFileSchema, RouteInfoSchema } from './chat'
 
 export const ChatRequestSchema = z.object({
   chatId: z.string().min(1),
@@ -54,6 +54,7 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
     durationMs: z.number(),
   }),
   z.object({ ...base, type: z.literal('context'), context: ContextUsageSchema }),
+  z.object({ ...base, type: z.literal('route'), route: RouteInfoSchema }),
   z.object({ ...base, type: z.literal('error'), message: z.string() }),
   z.object({ ...base, type: z.literal('done') }),
 ])

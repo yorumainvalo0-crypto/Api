@@ -1,20 +1,21 @@
 import { randomUUID } from 'node:crypto'
 import type { DatabaseSync } from 'node:sqlite'
 import { z } from 'zod'
-import { ProviderIdSchema, type ProviderId } from '@shared/schemas/settings'
 import {
   ContextUsageSchema,
   type ContextUsage,
   type ProviderAmounts,
   type UsageRange,
   type UsageSummary,
+  type UsageProvider,
   type UsageTotals,
+  UsageProviderSchema,
 } from '@shared/schemas/usage'
 import type { ModelTotals, UsageSnapshot } from '../agent/usage'
 
 const UsageRowSchema = z.object({
   request_id: z.string(),
-  provider: ProviderIdSchema.catch('anthropic'),
+  provider: UsageProviderSchema.catch('anthropic'),
   model: z.string(),
   input_tokens: z.number(),
   output_tokens: z.number(),
@@ -64,7 +65,7 @@ interface SeriesPoint {
   tokensByProvider: ProviderAmounts
 }
 
-const zeroAmounts = (): ProviderAmounts => ({ anthropic: 0, openrouter: 0, ollama: 0 })
+const zeroAmounts = (): ProviderAmounts => ({ anthropic: 0, openrouter: 0, ollama: 0, typesafe: 0 })
 
 /** Empty hourly (today) or daily buckets from `from` up to now, in local time. */
 function buildSeries(granularity: 'hour' | 'day', from: number, now: Date): SeriesPoint[] {
@@ -189,7 +190,7 @@ export class UsageRepository {
   /** Logs what one answer used, one row per model. */
   record(entry: {
     chatId: string
-    provider: ProviderId
+    provider: UsageProvider
     models: Record<string, ModelTotals>
     createdAt?: number
     /** Who used it: 'main' (default), a Cowork role name, 'router' or 'terminal'. */
@@ -234,8 +235,8 @@ export class UsageRepository {
     })
 
     const total = new Bucket()
-    const providers = new Map<ProviderId, Bucket>()
-    const models = new Map<string, { provider: ProviderId; model: string; bucket: Bucket }>()
+    const providers = new Map<UsageProvider, Bucket>()
+    const models = new Map<string, { provider: UsageProvider; model: string; bucket: Bucket }>()
     const agents = new Map<string, Bucket>()
     const granularity = range === 'today' ? 'hour' : 'day'
     const series = buildSeries(granularity, since ?? rows[0]?.created_at ?? now.getTime(), now)

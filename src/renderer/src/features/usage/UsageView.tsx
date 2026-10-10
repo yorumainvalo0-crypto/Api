@@ -1,9 +1,20 @@
 import { useEffect, useState } from 'react'
 import { RefreshCw } from 'lucide-react'
-import { PROVIDER_LABELS, ProviderIdSchema } from '@shared/schemas/settings'
-import type { UsageRange, UsageSummary, UsageTotals } from '@shared/schemas/usage'
+import {
+  UsageProviderSchema,
+  type UsageRange,
+  type UsageSummary,
+  type UsageTotals,
+} from '@shared/schemas/usage'
 import { api } from '../../lib/api'
-import { PROVIDER_COLORS, formatTokens, formatTokensShort, formatUsd } from './format'
+import {
+  PROVIDER_COLORS,
+  USAGE_PROVIDER_LABELS,
+  agentLabel,
+  formatTokens,
+  formatTokensShort,
+  formatUsd,
+} from './format'
 
 const RANGES: { id: UsageRange; label: string }[] = [
   { id: 'today', label: 'Heute' },
@@ -21,7 +32,7 @@ const METRICS: { id: Metric; label: string }[] = [
   { id: 'requests', label: 'Anfragen' },
 ]
 
-const PROVIDERS = ProviderIdSchema.options
+const PROVIDERS = UsageProviderSchema.options
 
 /** Statistics of tokens, costs and requests per provider, model and time. */
 export function UsageView() {
@@ -94,6 +105,7 @@ export function UsageView() {
               <Chart summary={summary} metric={metric} />
             </section>
             <Breakdown summary={summary} />
+            <AgentBreakdown summary={summary} />
           </>
         )}
         <p className="text-xs text-zinc-500">
@@ -165,7 +177,7 @@ function Legend() {
       {PROVIDERS.map((p) => (
         <span key={p} className="flex items-center gap-1">
           <span className={`h-2.5 w-2.5 rounded-sm ${PROVIDER_COLORS[p]}`} />
-          {PROVIDER_LABELS[p]}
+          {USAGE_PROVIDER_LABELS[p]}
         </span>
       ))}
     </div>
@@ -303,7 +315,7 @@ function ProviderRows(props: {
         <td className="px-2 py-1.5">
           <span className="flex items-center gap-2">
             <span className={`h-2.5 w-2.5 rounded-sm ${PROVIDER_COLORS[provider.provider]}`} />
-            {PROVIDER_LABELS[provider.provider]}
+            {USAGE_PROVIDER_LABELS[provider.provider]}
           </span>
         </td>
         <TotalsCells t={provider} />
@@ -315,5 +327,36 @@ function ProviderRows(props: {
         </tr>
       ))}
     </>
+  )
+}
+
+/** Usage per agent: main agent, Cowork subagents, router, Jev tool and terminal sessions. */
+function AgentBreakdown(props: { summary: UsageSummary }) {
+  const { summary } = props
+  // Only interesting once something besides the plain chat agent used tokens.
+  if (!summary.byAgent.some((a) => a.agent !== 'main')) return null
+  return (
+    <section className="overflow-x-auto rounded-lg border border-zinc-200 dark:border-zinc-800">
+      <table className="w-full text-sm">
+        <thead className="border-b border-zinc-200 dark:border-zinc-800">
+          <tr className="text-left text-xs text-zinc-500">
+            <th className="px-2 py-1.5 font-normal">Agent</th>
+            <th className="px-2 py-1.5 text-right font-normal">Anfragen</th>
+            <th className="px-2 py-1.5 text-right font-normal">Eingabe</th>
+            <th className="px-2 py-1.5 text-right font-normal">Ausgabe</th>
+            <th className="px-2 py-1.5 text-right font-normal">Cache</th>
+            <th className="px-2 py-1.5 text-right font-normal">Kosten</th>
+          </tr>
+        </thead>
+        <tbody>
+          {summary.byAgent.map((a) => (
+            <tr key={a.agent} className="border-t border-zinc-100 dark:border-zinc-800">
+              <td className="px-2 py-1.5">{agentLabel(a.agent)}</td>
+              <TotalsCells t={a} />
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </section>
   )
 }

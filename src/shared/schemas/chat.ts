@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { ProviderIdSchema } from './settings'
+import { EffortSchema, ProviderIdSchema } from './settings'
 
 /** `document` = office files (Word, Excel, PowerPoint, OpenOffice, RTF), converted to text. */
 export const AttachmentKindSchema = z.enum(['image', 'pdf', 'text', 'model3d', 'document', 'file'])
@@ -52,8 +52,23 @@ export const ProducedFileSchema = z.object({
 export type ProducedFile = z.infer<typeof ProducedFileSchema>
 
 /** Ordered content of an assistant message: text interleaved with tool calls and files. */
+/** How the Cowork mode routed a request (shown above the answer). */
+export const RouteInfoSchema = z.object({
+  roleId: z.string(),
+  roleName: z.string(),
+  provider: ProviderIdSchema,
+  model: z.string(),
+  effort: EffortSchema,
+  by: z.enum(['jev', 'default']),
+  confidence: z.number().nullable(),
+  splitProbability: z.number().nullable(),
+  note: z.string().nullable(),
+})
+export type RouteInfo = z.infer<typeof RouteInfoSchema>
+
 export const MessagePartSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('text'), text: z.string() }),
+  z.object({ type: z.literal('route'), route: RouteInfoSchema }),
   z.object({ type: z.literal('tool'), call: ToolCallSchema }),
   z.object({ type: z.literal('file'), file: ProducedFileSchema }),
 ])

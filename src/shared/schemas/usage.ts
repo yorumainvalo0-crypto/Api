@@ -4,10 +4,15 @@ import { ProviderIdSchema } from './settings'
 export const UsageRangeSchema = z.enum(['today', '7d', '30d', 'month', 'all'])
 export type UsageRange = z.infer<typeof UsageRangeSchema>
 
+/** Providers that appear in the usage log: the chat providers plus TypeSafe (Jev). */
+export const UsageProviderSchema = z.enum([...ProviderIdSchema.options, 'typesafe'])
+export type UsageProvider = z.infer<typeof UsageProviderSchema>
+
 const ProviderAmountsSchema = z.object({
   anthropic: z.number(),
   openrouter: z.number(),
   ollama: z.number(),
+  typesafe: z.number(),
 })
 export type ProviderAmounts = z.infer<typeof ProviderAmountsSchema>
 
@@ -27,8 +32,8 @@ export const UsageSummarySchema = z.object({
   /** Start of the range (epoch ms), null for "all". */
   since: z.number().nullable(),
   total: UsageTotalsSchema,
-  byProvider: z.array(UsageTotalsSchema.extend({ provider: ProviderIdSchema })),
-  byModel: z.array(UsageTotalsSchema.extend({ provider: ProviderIdSchema, model: z.string() })),
+  byProvider: z.array(UsageTotalsSchema.extend({ provider: UsageProviderSchema })),
+  byModel: z.array(UsageTotalsSchema.extend({ provider: UsageProviderSchema, model: z.string() })),
   /** Main agent, Cowork roles (subagents), router and terminal sessions. */
   byAgent: z.array(UsageTotalsSchema.extend({ agent: z.string() })),
   /** Hours of today for "today", calendar days otherwise. */

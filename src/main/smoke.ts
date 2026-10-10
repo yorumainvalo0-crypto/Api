@@ -163,7 +163,7 @@ export function runSmokeTest(win: BrowserWindow): void {
 async function checkPopoverDismiss(win: BrowserWindow): Promise<void> {
   const searchOpen = `Boolean(document.querySelector('input[placeholder^="Suchen oder Modell-ID"]'))`
   const opened = (await win.webContents.executeJavaScript(`(async () => {
-    document.querySelector('main header button')?.click()
+    document.querySelector('main header button[aria-haspopup="listbox"]')?.click()
     await new Promise((r) => setTimeout(r, 200))
     return ${searchOpen}
   })()`)) as boolean

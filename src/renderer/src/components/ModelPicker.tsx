@@ -69,6 +69,8 @@ export function ModelPicker(props: {
     <div ref={rootRef} className="relative">
       <button
         type="button"
+        aria-haspopup="listbox"
+        aria-expanded={open}
         onClick={() => setOpen((o) => !o)}
         className={`flex max-w-full items-center gap-1 rounded-md border border-zinc-300 px-2 py-1 text-left text-sm dark:border-zinc-700 ${
           props.compact ? '' : 'w-full'

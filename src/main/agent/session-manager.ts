@@ -9,7 +9,7 @@ import {
 } from '@anthropic-ai/claude-agent-sdk'
 import type { AgentEvent, ChatRequest, PermissionDecision } from '@shared/schemas/agent'
 import type { AgentPermissionMode, Attachment, ChatSummary } from '@shared/schemas/chat'
-import type { ProviderId, Settings } from '@shared/schemas/settings'
+import type { CoworkRole, ProviderId, Settings } from '@shared/schemas/settings'
 import type { ContextUsage } from '@shared/schemas/usage'
 import { applyReplyEvent, EMPTY_REPLY, type ReplyState } from '@shared/message-parts'
 import type { SecretStore } from '../storage/secret-store'
@@ -19,6 +19,15 @@ import { extractDocument } from '../documents/extract'
 import type { UsageRepository } from '../storage/usage-repository'
 import { contextFromResult, parseContextResponse } from './context'
 import { describeAppCapabilities } from './app-context'
+import { applyRole, routeRequest } from '../cowork/router'
+import { coworkBrief, SUBAGENT_NOTE } from '../cowork/brief'
+import {
+  COWORK_MCP_SERVER,
+  COWORK_TOOL_NAMES,
+  createCoworkMcpServer,
+  type SubagentResult,
+} from '../cowork/mcp-server'
+import type { JevResponse } from '../jev/client'
 import { jevClientFromSettings } from '../jev/config'
 import { createJevMcpServer, JEV_MCP_SERVER, JEV_TOOL_NAMES } from '../jev/mcp-server'
 import {
@@ -237,6 +246,96 @@ export class SessionManager {
     return sumTotals(models).costUsd
   }
 
+  /** Logs a Jev call (router or tool); returns its cost in USD (0 when unknown). */
+  private recordJevUsage(
+    chatId: string,
+    agent: string,
+    source: Settings['jevSource'],
+    model: string,
+    usage: NonNullable<JevResponse['usage']>,
+  ): number {
+    const costUsd = usage.cost ?? 0
+    this.deps.usage?.record({
+      chatId,
+      agent,
+      provider: source === 'typesafe' ? 'typesafe' : 'openrouter',
+      models: {
+        [model]: {
+          inputTokens: usage.input_tokens ?? 0,
+          outputTokens: usage.output_tokens ?? 0,
+          cacheReadTokens: 0,
+          cacheWriteTokens: 0,
+          costUsd,
+        },
+      },
+    })
+    return costUsd
+  }
+
+  /**
+   * Runs one Cowork subagent as its own query with the role's provider, model and effort.
+   * Its usage is logged separately (agent "subagent:<role>") and returned to the coordinator.
+   */
+  private async runSubagent(args: {
+    chatId: string
+    run: ActiveRun
+    role: CoworkRole
+    prompt: string
+    baseSettings: Settings
+    buildOptions: (env: Record<string, string | undefined>, settings: Settings) => Options
+  }): Promise<SubagentResult> {
+    const { chatId, role } = args
+    const settings = applyRole(args.baseSettings, role)
+    const runtime = buildProviderRuntime({
+      provider: role.provider,
+      settings,
+      secret: this.deps.secrets.get(role.provider),
+      baseEnv: process.env,
+      configDir: join(this.deps.dataDir, 'agent-config'),
+      appVersion: this.deps.appVersion,
+    })
+    const abort = new AbortController()
+    const stop = () => abort.abort()
+    args.run.abort.signal.addEventListener('abort', stop, { once: true })
+    try {
+      const options: Options = {
+        ...args.buildOptions(runtime.env, settings),
+        abortController: abort,
+        ...(runtime.model ? { model: runtime.model } : {}),
+      }
+      let text = ''
+      let isError = false
+      let model = role.model || 'Standard'
+      let costUsd = 0
+      for await (const message of query({ prompt: args.prompt, options })) {
+        if (message.type === 'system' && message.subtype === 'init') model = message.model
+        if (message.type !== 'result') continue
+        isError = message.is_error || message.subtype !== 'success'
+        text =
+          message.subtype === 'success'
+            ? message.result
+            : message.errors.join('\n') || 'Der Subagent wurde ohne Ergebnis beendet.'
+        const totals = fromSdkModelUsage(message.modelUsage)
+        const models: Record<string, ModelTotals> =
+          role.provider === 'ollama'
+            ? Object.fromEntries(Object.entries(totals).map(([m, t]) => [m, { ...t, costUsd: 0 }]))
+            : totals
+        if (Object.keys(models).length > 0) {
+          this.deps.usage?.record({
+            chatId,
+            provider: role.provider,
+            models,
+            agent: `subagent:${role.name}`,
+          })
+        }
+        costUsd = sumTotals(models).costUsd
+      }
+      return { text: text || '[Keine Antwort]', model, costUsd, isError }
+    } finally {
+      args.run.abort.signal.removeEventListener('abort', stop)
+    }
+  }
+
   cancelAll(): void {
     for (const chatId of this.active.keys()) this.cancel(chatId)
   }
@@ -252,8 +351,42 @@ export class SessionManager {
 
     let endInput = () => {}
     const inputDone = new Promise<void>((resolve) => (endInput = resolve))
+    // Costs of the router, the Jev tool and subagents; added to the answer's cost.
+    let extraCostUsd = 0
     try {
-      const settings = this.deps.getSettings()
+      const baseSettings = this.deps.getSettings()
+      const jevSetup = baseSettings.jevEnabled
+        ? jevClientFromSettings(baseSettings, this.deps.secrets, {
+            endpoint: this.deps.jevEndpoint,
+            fetchImpl: this.deps.jevFetch,
+          })
+        : undefined
+      const jevClient = jevSetup && 'client' in jevSetup ? jevSetup.client : undefined
+      const recordJev = (agent: string, usage: NonNullable<JevResponse['usage']>) => {
+        if (!jevClient) return
+        extraCostUsd += this.recordJevUsage(
+          chatId,
+          agent,
+          baseSettings.jevSource,
+          jevClient.model,
+          usage,
+        )
+      }
+
+      // Cowork: Jev picks the role (provider, model, effort) for this request.
+      const route = baseSettings.coworkEnabled
+        ? await routeRequest({
+            prompt: request.prompt,
+            attachmentNames: request.attachments.map((a) => a.name),
+            mode: chats.summary(chatId)?.mode === 'code' ? 'code' : 'chat',
+            roles: baseSettings.coworkRoles,
+            defaultRoleId: baseSettings.coworkDefaultRole,
+            jev: jevClient,
+            subagents: baseSettings.coworkSubagents,
+          })
+        : undefined
+      if (route?.usage) recordJev('router', route.usage)
+      const settings = route ? applyRole(baseSettings, route.role) : baseSettings
       const provider = settings.activeProvider
       const modelLabel = settings.models[provider] || 'Standard'
 
@@ -273,6 +406,23 @@ export class SessionManager {
       const chat = chats.summary(chatId)
       if (!chat) throw new SessionError('Chat konnte nicht angelegt werden.')
       chats.addMessage({ chatId, role: 'user', text: request.prompt, attachments })
+      if (route) {
+        emit({
+          chatId,
+          type: 'route',
+          route: {
+            roleId: route.role.id,
+            roleName: route.role.name,
+            provider: route.role.provider,
+            model: route.role.model,
+            effort: route.role.effort,
+            by: route.by,
+            confidence: route.confidence,
+            splitProbability: route.splitProbability,
+            note: route.note,
+          },
+        })
+      }
 
       const runtime = buildProviderRuntime({
         provider,
@@ -288,8 +438,10 @@ export class SessionManager {
       mkdirSync(cwd, { recursive: true })
 
       const resume = chats.getSdkSessionId(chatId)
-      const web =
+      // MCP server instances cannot be shared between queries, so subagents get fresh ones.
+      const makeWeb = () =>
         settings.webAccess && this.deps.createWebServer ? this.deps.createWebServer() : undefined
+      const web = makeWeb()
       const store = this.deps.comfyWorkflows
       const comfyConfig = store
         ? (): ComfyConfig => {
@@ -306,45 +458,42 @@ export class SessionManager {
             }
           }
         : undefined
-      const media = createMediaMcpServer({
-        outputsDir: outputsDir(dataDir, chat),
-        readableRoots: [
-          chatWorkspace(dataDir, chatId),
-          ...(chat.projectPath ? [chat.projectPath] : []),
-        ],
-        getImageConfig: () => {
-          const current = this.deps.getSettings()
-          return current.imageBackend === 'comfyui' && comfyConfig
-            ? { backend: 'comfyui', comfy: comfyConfig() }
-            : {
-                backend: 'openrouter',
-                apiKey: this.deps.secrets.get('openrouter'),
-                model: current.imageModel,
+      const makeMedia = () =>
+        createMediaMcpServer({
+          outputsDir: outputsDir(dataDir, chat),
+          readableRoots: [
+            chatWorkspace(dataDir, chatId),
+            ...(chat.projectPath ? [chat.projectPath] : []),
+          ],
+          getImageConfig: () => {
+            const current = this.deps.getSettings()
+            return current.imageBackend === 'comfyui' && comfyConfig
+              ? { backend: 'comfyui', comfy: comfyConfig() }
+              : {
+                  backend: 'openrouter',
+                  apiKey: this.deps.secrets.get('openrouter'),
+                  model: current.imageModel,
+                }
+          },
+          ...(comfyConfig ? { getComfyConfig: comfyConfig } : {}),
+          ...(settings.ocrEnabled
+            ? {
+                ocr: {
+                  vision: new OllamaVision({
+                    baseUrl: settings.ocrBaseUrl || settings.ollamaBaseUrl,
+                    ...(this.deps.ocrFetch ? { fetchImpl: this.deps.ocrFetch } : {}),
+                  }),
+                  model: settings.ocrModel,
+                  keepAliveSec: settings.ocrKeepAliveSec,
+                },
               }
-        },
-        ...(comfyConfig ? { getComfyConfig: comfyConfig } : {}),
-        ...(settings.ocrEnabled
-          ? {
-              ocr: {
-                vision: new OllamaVision({
-                  baseUrl: settings.ocrBaseUrl || settings.ollamaBaseUrl,
-                  ...(this.deps.ocrFetch ? { fetchImpl: this.deps.ocrFetch } : {}),
-                }),
-                model: settings.ocrModel,
-                keepAliveSec: settings.ocrKeepAliveSec,
-              },
-            }
-          : {}),
-        onFile: (file) => emit({ chatId, type: 'output-file', file }),
-        ...(this.deps.mediaFetch ? { fetchImpl: this.deps.mediaFetch } : {}),
-      })
-      const jevSetup = settings.jevEnabled
-        ? jevClientFromSettings(settings, this.deps.secrets, {
-            endpoint: this.deps.jevEndpoint,
-            fetchImpl: this.deps.jevFetch,
-          })
-        : undefined
-      const jev = jevSetup && 'client' in jevSetup ? createJevMcpServer(jevSetup.client) : undefined
+            : {}),
+          onFile: (file) => emit({ chatId, type: 'output-file', file }),
+          ...(this.deps.mediaFetch ? { fetchImpl: this.deps.mediaFetch } : {}),
+        })
+      const makeJev = () =>
+        jevClient ? createJevMcpServer(jevClient, (usage) => recordJev('jev', usage)) : undefined
+      const jev = makeJev()
       const addons = this.deps.getAddons?.() ?? { mcpServers: {}, plugins: [], skills: [] }
       const capabilities = (mode: 'chat' | 'code') =>
         describeAppCapabilities({
@@ -384,6 +533,84 @@ export class SessionManager {
         ...(jev ? JEV_TOOL_NAMES : []),
         'Skill',
       ]
+      const sharedServers = () => {
+        const subWeb = makeWeb()
+        const subJev = makeJev()
+        return {
+          ...addons.mcpServers,
+          [MEDIA_MCP_SERVER]: makeMedia(),
+          ...(subWeb ? { [WEB_MCP_SERVER]: subWeb } : {}),
+          ...(subJev ? { [JEV_MCP_SERVER]: subJev } : {}),
+        }
+      }
+      // Options shared by the main agent and subagents for the chat/coding mode.
+      const modeOptions = (systemNote: string): Partial<Options> =>
+        isCode
+          ? {
+              tools: { type: 'preset', preset: 'claude_code' },
+              // user = installed skills (isolated config dir); project = CLAUDE.md, .claude/settings.json.
+              settingSources: ['user', 'project'],
+              skills: 'all',
+              systemPrompt: {
+                type: 'preset',
+                preset: 'claude_code',
+                append: `${CODE_SYSTEM_APPEND}\n\n${systemNote}`,
+              },
+              permissionMode: chat.permissionMode,
+              ...(chat.permissionMode === 'bypassPermissions'
+                ? { allowDangerouslySkipPermissions: true }
+                : {}),
+              hooks: { PreToolUse: [dangerousCommandHook()] },
+            }
+          : {
+              // No built-in file/shell tools in chat mode; installed skills stay available.
+              tools: addons.skills.length > 0 ? ['Skill'] : [],
+              settingSources: addons.skills.length > 0 ? ['user'] : [],
+              ...(addons.skills.length > 0 ? { skills: addons.skills } : {}),
+              permissionMode: 'default',
+              systemPrompt: `${CHAT_SYSTEM_PROMPT}\n\n${systemNote}`,
+            }
+
+      const cowork =
+        route && baseSettings.coworkSubagents
+          ? createCoworkMcpServer({
+              roles: baseSettings.coworkRoles,
+              parallelSafe: !isCode,
+              runSubagent: async ({ role, task, context }) => {
+                const result = await this.runSubagent({
+                  chatId,
+                  run,
+                  role,
+                  prompt: context ? `${task}\n\n<context>\n${context}\n</context>` : task,
+                  baseSettings,
+                  buildOptions: (env, subSettings) => ({
+                    cwd,
+                    env,
+                    pathToClaudeCodeExecutable: this.deps.executablePath,
+                    persistSession: false,
+                    mcpServers: sharedServers(),
+                    plugins: addons.plugins,
+                    allowedTools: autoAllowed,
+                    ...(subSettings.maxBudgetUsd > 0
+                      ? { maxBudgetUsd: subSettings.maxBudgetUsd }
+                      : {}),
+                    ...effortOption(subSettings, role.provider),
+                    canUseTool: this.permissions.canUseTool(chatId),
+                    disallowedTools: ['WebSearch', 'WebFetch'],
+                    ...modeOptions(`${SUBAGENT_NOTE}\n\n${capabilities(isCode ? 'code' : 'chat')}`),
+                  }),
+                })
+                extraCostUsd += result.costUsd
+                return result
+              },
+            })
+          : undefined
+      const mainNote = [
+        route ? coworkBrief(route, baseSettings.coworkRoles, Boolean(cowork)) : '',
+        capabilities(isCode ? 'code' : 'chat'),
+      ]
+        .filter(Boolean)
+        .join('\n\n')
       const common: Options = {
         cwd,
         env: runtime.env,
@@ -395,12 +622,13 @@ export class SessionManager {
         ...(resume ? { resume } : {}),
         mcpServers: {
           ...addons.mcpServers,
-          [MEDIA_MCP_SERVER]: media,
+          [MEDIA_MCP_SERVER]: makeMedia(),
           ...(web ? { [WEB_MCP_SERVER]: web } : {}),
           ...(jev ? { [JEV_MCP_SERVER]: jev } : {}),
+          ...(cowork ? { [COWORK_MCP_SERVER]: cowork } : {}),
         },
         plugins: addons.plugins,
-        allowedTools: autoAllowed,
+        allowedTools: [...autoAllowed, ...(cowork ? COWORK_TOOL_NAMES : [])],
         ...(settings.maxBudgetUsd > 0 ? { maxBudgetUsd: settings.maxBudgetUsd } : {}),
         ...effortOption(settings, provider),
         // Tools from user-installed MCP servers and plugins ask for approval.
@@ -408,33 +636,7 @@ export class SessionManager {
         // Our own free web tools replace the built-in ones (which need Anthropic-hosted services).
         disallowedTools: ['WebSearch', 'WebFetch'],
       }
-      const options: Options = isCode
-        ? {
-            ...common,
-            tools: { type: 'preset', preset: 'claude_code' },
-            // user = installed skills (isolated config dir); project = CLAUDE.md, .claude/settings.json.
-            settingSources: ['user', 'project'],
-            skills: 'all',
-            systemPrompt: {
-              type: 'preset',
-              preset: 'claude_code',
-              append: `${CODE_SYSTEM_APPEND}\n\n${capabilities('code')}`,
-            },
-            permissionMode: chat.permissionMode,
-            ...(chat.permissionMode === 'bypassPermissions'
-              ? { allowDangerouslySkipPermissions: true }
-              : {}),
-            hooks: { PreToolUse: [dangerousCommandHook()] },
-          }
-        : {
-            ...common,
-            // No built-in file/shell tools in chat mode; installed skills stay available.
-            tools: addons.skills.length > 0 ? ['Skill'] : [],
-            settingSources: addons.skills.length > 0 ? ['user'] : [],
-            ...(addons.skills.length > 0 ? { skills: addons.skills } : {}),
-            permissionMode: 'default',
-            systemPrompt: `${CHAT_SYSTEM_PROMPT}\n\n${capabilities('chat')}`,
-          }
+      const options: Options = { ...common, ...modeOptions(mainNote) }
 
       const documents = await extractAttachedDocuments(attachments)
       const blocks = buildPromptBlocks(
@@ -469,7 +671,11 @@ export class SessionManager {
             : undefined
         for (const event of normalizeSdkMessage(chatId, message as SdkMessageLike)) {
           // The SDK reports session totals; show and store what this answer cost.
-          emit(event.type === 'result' && cost !== undefined ? { ...event, costUsd: cost } : event)
+          emit(
+            event.type === 'result' && cost !== undefined
+              ? { ...event, costUsd: cost + extraCostUsd }
+              : event,
+          )
         }
         if (message.type === 'result') {
           const context =

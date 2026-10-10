@@ -1,12 +1,15 @@
 import { createSdkMcpServer, tool } from '@anthropic-ai/claude-agent-sdk'
 import { z } from 'zod'
-import { formatJevResponse, JevQuestionSchema, type JevClient } from './client'
+import { formatJevResponse, JevQuestionSchema, type JevClient, type JevResponse } from './client'
 
 export const JEV_MCP_SERVER = 'jev'
 export const JEV_TOOL_NAMES = [`mcp__${JEV_MCP_SERVER}__evaluate`]
 
 /** In-process MCP server that lets any chat model ask TypeSafe's Jev for typed decisions. */
-export function createJevMcpServer(client: JevClient) {
+export function createJevMcpServer(
+  client: JevClient,
+  onUsage?: (usage: NonNullable<JevResponse['usage']>) => void,
+) {
   return createSdkMcpServer({
     name: JEV_MCP_SERVER,
     version: '1.0.0',
@@ -33,6 +36,7 @@ export function createJevMcpServer(client: JevClient) {
         async ({ state, questions }) => {
           try {
             const response = await client.evaluate(state, questions)
+            if (response.usage) onUsage?.(response.usage)
             return { content: [{ type: 'text' as const, text: formatJevResponse(response) }] }
           } catch (error) {
             return {
