@@ -15,7 +15,8 @@ import {
   ChatSummarySchema,
 } from './schemas/chat'
 import { ConnectionTestResultSchema, ModelInfoSchema } from './schemas/models'
-import { projectContract, projectEvents } from './ipc-project'
+import { projectContract } from './ipc-project'
+import { terminalContract, terminalEvents } from './ipc-terminal'
 import { addonsContract } from './ipc-addons'
 import { OutputFileSchema } from './schemas/media'
 import { UpdateStatusSchema } from './schemas/updates'
@@ -176,6 +177,7 @@ export const ipcContract = {
     output: z.object({ ok: z.boolean() }),
   },
   ...projectContract,
+  ...terminalContract,
   ...addonsContract,
 } as const
 
@@ -196,7 +198,7 @@ export const ipcEvents = {
     done: z.boolean(),
     error: z.string().nullable(),
   }),
-  ...projectEvents,
+  ...terminalEvents,
 } as const
 
 export type IpcEventName = keyof typeof ipcEvents

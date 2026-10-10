@@ -1,5 +1,13 @@
 import { useCallback, useEffect, useState } from 'react'
-import { BarChart3, MessageSquare, Moon, Puzzle, Settings as SettingsIcon, Sun } from 'lucide-react'
+import {
+  BarChart3,
+  MessageSquare,
+  Moon,
+  Puzzle,
+  Settings as SettingsIcon,
+  SquareTerminal,
+  Sun,
+} from 'lucide-react'
 import type { Settings } from '@shared/schemas/settings'
 import type { ChatSummary } from '@shared/schemas/chat'
 import { api } from './lib/api'
@@ -8,9 +16,10 @@ import { ChatSidebar } from './features/chat/ChatSidebar'
 import { SettingsView } from './features/settings/SettingsView'
 import { AddonsView } from './features/addons/AddonsView'
 import { UsageView } from './features/usage/UsageView'
+import { TerminalView } from './features/terminal/TerminalView'
 import { UpdateToast } from './components/UpdateToast'
 
-type View = 'chat' | 'addons' | 'usage' | 'settings'
+type View = 'chat' | 'terminal' | 'addons' | 'usage' | 'settings'
 
 export function App() {
   const [view, setView] = useState<View>('chat')
@@ -18,6 +27,9 @@ export function App() {
   const [chats, setChats] = useState<ChatSummary[]>([])
   const [activeChatId, setActiveChatId] = useState<string>(() => crypto.randomUUID())
   const [running, setRunning] = useState<ReadonlySet<string>>(new Set())
+  // The terminal view stays mounted once opened, so its shells survive view switches.
+  const [terminalOpened, setTerminalOpened] = useState(false)
+  if (view === 'terminal' && !terminalOpened) setTerminalOpened(true)
 
   const refreshChats = useCallback(() => {
     void api.invoke('chats:list').then(setChats)
@@ -63,6 +75,8 @@ export function App() {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (!(e.ctrlKey || e.metaKey)) return
+      // Inside a terminal, Ctrl+K/N etc. belong to the shell.
+      if (e.target instanceof Element && e.target.closest('.xterm')) return
       const key = e.key.toLowerCase()
       if (key === 'n' && !e.shiftKey) {
         e.preventDefault()
@@ -89,6 +103,13 @@ export function App() {
       <nav className="flex w-14 shrink-0 flex-col items-center gap-2 border-r border-zinc-200 bg-zinc-50 py-3 dark:border-zinc-800 dark:bg-zinc-900">
         <NavButton label="Chat" active={view === 'chat'} onClick={() => setView('chat')}>
           <MessageSquare size={20} />
+        </NavButton>
+        <NavButton
+          label="Terminal"
+          active={view === 'terminal'}
+          onClick={() => setView('terminal')}
+        >
+          <SquareTerminal size={20} />
         </NavButton>
         <NavButton
           label="Skills & Add-ons"
@@ -136,13 +157,18 @@ export function App() {
               onSettingsChange={setSettings}
             />
           </>
-        ) : view === 'addons' ? (
+        ) : view === 'terminal' ? null : view === 'addons' ? (
           <AddonsView />
         ) : view === 'usage' ? (
           <UsageView />
         ) : (
           <SettingsView settings={settings} onChange={setSettings} />
         )}
+        {terminalOpened ? (
+          <div className={view === 'terminal' ? 'flex min-w-0 flex-1' : 'hidden'}>
+            <TerminalView active={view === 'terminal'} />
+          </div>
+        ) : null}
       </main>
       <UpdateToast onOpenSettings={() => setView('settings')} />
     </div>

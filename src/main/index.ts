@@ -10,6 +10,7 @@ import { resolveClaudeExecutable } from './agent/executable'
 import { registerIpcHandlers, sendEvent } from './ipc/register'
 import { listModels, testConnection } from './providers/model-catalog'
 import { createProjectHandlers } from './project/handlers'
+import { createTerminalHandlers } from './terminal/handlers'
 import { AddonStore } from './addons/addon-store'
 import { createAddonHandlers } from './addons/handlers'
 import { ComfyClient } from './media/comfy-client'
@@ -134,6 +135,7 @@ function bootstrap(): void {
   const comfyWorkflows = new ComfyWorkflowStore(join(dataDir, 'comfy'))
   let ocrDownload: AbortController | undefined
 
+  const claudeExecutable = resolveClaudeExecutable()
   const sessions = new SessionManager({
     usage,
     comfyWorkflows,
@@ -144,7 +146,7 @@ function bootstrap(): void {
     chats,
     dataDir,
     appVersion: app.getVersion(),
-    executablePath: resolveClaudeExecutable(),
+    executablePath: claudeExecutable,
     emit: (event) => {
       if (mainWindow) sendEvent(mainWindow.webContents, 'agent:event', event)
     },
@@ -402,7 +404,16 @@ function bootstrap(): void {
     'agent:permission-respond': ({ requestId, decision, message }) => ({
       ok: sessions.respondToPermission(requestId, decision, message),
     }),
-    ...createProjectHandlers({ getTarget: () => mainWindow?.webContents }),
+    ...createProjectHandlers(),
+    ...createTerminalHandlers({
+      getTarget: () => mainWindow?.webContents,
+      dataDir,
+      appVersion: app.getVersion(),
+      claudeExecutable,
+      getSettings: () => settings.get(),
+      getSecret: (provider) => secrets.get(provider),
+      usage,
+    }),
     ...createAddonHandlers({ store: addons, getWindow: () => mainWindow }),
   })
 
