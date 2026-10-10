@@ -1,9 +1,12 @@
 import { mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { TerminalOutput } from '@shared/schemas/project'
 import { shellCommand, TerminalRunner } from '../src/main/project/terminal'
+
+// The first PowerShell start on a cold Windows machine can take several seconds.
+vi.setConfig({ testTimeout: 30_000 })
 
 let dir: string
 let events: TerminalOutput[]
@@ -16,10 +19,11 @@ beforeEach(() => {
 })
 afterEach(() => {
   runner.killAll()
-  rmSync(dir, { recursive: true, force: true })
+  // Windows keeps the folder locked until the killed process has fully exited.
+  rmSync(dir, { recursive: true, force: true, maxRetries: 10, retryDelay: 200 })
 })
 
-function waitForExit(runId: string, timeoutMs = 10_000): Promise<TerminalOutput> {
+function waitForExit(runId: string, timeoutMs = 25_000): Promise<TerminalOutput> {
   return new Promise((resolve, reject) => {
     const started = Date.now()
     const check = () => {

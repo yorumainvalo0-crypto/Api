@@ -42,7 +42,16 @@ describe('local ComfyUI generation inside the agent (real runtime)', () => {
         }
       }
       if (results === 1) {
-        const path = /- ([^"\\]+stuhl\.png)/.exec(text)?.[1] ?? ''
+        // Read the saved path from the tool result text (Windows paths contain backslashes).
+        const resultText = ((body.messages ?? []) as { content?: unknown }[])
+          .flatMap((m) =>
+            Array.isArray(m.content) ? (m.content as { type?: string; content?: unknown }[]) : [],
+          )
+          .filter((b) => b.type === 'tool_result')
+          .map((b) => JSON.stringify(b.content))
+          .join('\n')
+        const encoded = /- (.+?stuhl\.png)/.exec(resultText)?.[1] ?? ''
+        const path = JSON.parse(`"${encoded}"`) as string
         return {
           toolUse: {
             name: 'mcp__media__generate_3d_model',
