@@ -80,17 +80,3 @@ export const GitCommitInputSchema = z.object({
 
 export const GitCommitResultSchema = z.object({ ok: z.boolean(), output: z.string() })
 export type GitCommitResult = z.infer<typeof GitCommitResultSchema>
-
-export const TerminalRunInputSchema = z.object({
-  projectPath: ProjectPathSchema,
-  command: z.string().trim().min(1).max(10_000),
-})
-
-export const TerminalOutputSchema = z.object({
-  runId: z.string(),
-  kind: z.enum(['stdout', 'stderr', 'exit', 'error']),
-  data: z.string(),
-  /** Only for `exit`: the exit code, null if the process was killed by a signal. */
-  exitCode: z.number().int().nullable().optional(),
-})
-export type TerminalOutput = z.infer<typeof TerminalOutputSchema>

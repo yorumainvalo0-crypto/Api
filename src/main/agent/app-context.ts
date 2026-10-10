@@ -81,6 +81,8 @@ export function describeAppCapabilities(c: AppCapabilities): string {
     '',
     '### Weitere App-Funktionen (zum Erklären, keine Werkzeuge)',
     '- Coding: „Projekt öffnen (Coding)“ startet einen Agenten mit Dateizugriff, Terminal, Git und Freigabe-Modi.',
+    '- Terminal (Symbol links): echte PowerShell; der Befehl `claude` startet Claude Code mit den Keys, dem Modell und dem Effort der App, der Verbrauch landet in der Statistik.',
+    '- Cowork (Schalter oben im Chat): Jev verteilt Anfragen auf Rollen mit eigenem Modell und Effort, Subagents übernehmen Teilaufgaben; Rollen unter Einstellungen → Cowork.',
     '- Modell- und Effort-Auswahl oben im Chat; Kontext-Anzeige zeigt, wie voll das Kontextfenster ist.',
     '- „Verbrauch“ (Diagramm-Symbol links): Tokens, Cache und Kosten je Anbieter/Modell, Verlauf pro Stunde/Tag.',
     '- Skills, Plugins und MCP-Server unter „Skills & Add-ons“ (Puzzle-Symbol) installieren.',

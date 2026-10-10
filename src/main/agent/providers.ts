@@ -24,13 +24,14 @@ export interface BuildProviderRuntimeArgs {
 }
 
 /**
- * Maps a provider selection to the environment the Claude Code runtime needs.
- * OpenRouter and Ollama expose Anthropic-compatible endpoints, so one agent core serves all three.
+ * The runtime environment without any provider: inherited Anthropic credentials/endpoints and
+ * Claude Code settings are dropped, the config dir is isolated and telemetry is off.
  */
-export function buildProviderRuntime(args: BuildProviderRuntimeArgs): ProviderRuntime {
-  const { provider, settings, secret, baseEnv, configDir, appVersion } = args
-
-  // Drop inherited Anthropic credentials/endpoints so only the selected provider is used.
+export function isolatedRuntimeEnv(
+  baseEnv: Record<string, string | undefined>,
+  configDir: string,
+  appVersion: string,
+): Record<string, string | undefined> {
   const env: Record<string, string | undefined> = {}
   for (const [key, value] of Object.entries(baseEnv)) {
     if (!key.startsWith('ANTHROPIC_') && !key.startsWith('CLAUDE_')) env[key] = value
@@ -39,6 +40,16 @@ export function buildProviderRuntime(args: BuildProviderRuntimeArgs): ProviderRu
   env['CLAUDE_AGENT_SDK_CLIENT_APP'] = `ai-workbench/${appVersion}`
   env['DISABLE_TELEMETRY'] = '1'
   env['CLAUDE_CODE_DISABLE_NONESSENTIAL_TRAFFIC'] = '1'
+  return env
+}
+
+/**
+ * Maps a provider selection to the environment the Claude Code runtime needs.
+ * OpenRouter and Ollama expose Anthropic-compatible endpoints, so one agent core serves all three.
+ */
+export function buildProviderRuntime(args: BuildProviderRuntimeArgs): ProviderRuntime {
+  const { provider, settings, secret, baseEnv, configDir, appVersion } = args
+  const env = isolatedRuntimeEnv(baseEnv, configDir, appVersion)
 
   const selectedModel = settings.models[provider].trim() || undefined
 

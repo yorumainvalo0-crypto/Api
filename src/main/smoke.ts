@@ -146,6 +146,7 @@ export function runSmokeTest(win: BrowserWindow): void {
             if (!ok) throw new Error('hidden Chromium loader did not render JavaScript content')
             return checkPopoverDismiss(win)
           })
+          .then(() => checkTerminal(win, projectPath))
           .then(() => {
             return captureScreenshot(win)
           })
@@ -197,6 +198,43 @@ async function checkPopoverDismiss(win: BrowserWindow): Promise<void> {
     throw new Error('select options are unreadable')
   }
   console.log(`[smoke] theme ${JSON.stringify(theme)}`)
+}
+
+/**
+ * Starts a real shell in a PTY through IPC (node-pty must load from app.asar.unpacked in the
+ * packaged app) and runs the bundled Claude Code through the generated `claude` wrapper on PATH.
+ */
+async function checkTerminal(win: BrowserWindow, cwd: string): Promise<void> {
+  const result = (await win.webContents.executeJavaScript(`(async () => {
+    const sessionId = crypto.randomUUID()
+    let output = ''
+    const off = window.api.on('terminal:data', (e) => { if (e.sessionId === sessionId) output += e.data })
+    const waitFor = async (text, ms) => {
+      const start = Date.now()
+      while (!output.includes(text)) {
+        if (Date.now() - start > ms) throw new Error('terminal: no "' + text + '" in ' + JSON.stringify(output.slice(-600)))
+        await new Promise((r) => setTimeout(r, 100))
+      }
+    }
+    try {
+      const cwd = ${JSON.stringify(cwd)}
+      const created = await window.api.invoke('terminal:create', {
+        sessionId, cols: 120, rows: 30, ...(cwd ? { cwd } : {}),
+      })
+      const powershell = /pwsh|powershell/i.test(created.shell)
+      const write = (data) => window.api.invoke('terminal:write', { sessionId, data })
+      // The marker is assembled by the shell, so the echoed input does not contain it.
+      await write((powershell ? "Write-Output ('AIW-PTY' + '-OK')" : 'echo AIW-PTY""-OK') + '\\r')
+      await waitFor('AIW-PTY-OK', 30000)
+      await write('claude --version\\r')
+      await waitFor('(Claude Code)', 60000)
+      return { shell: created.shell, ok: true }
+    } finally {
+      off()
+      await window.api.invoke('terminal:kill', { sessionId })
+    }
+  })()`)) as { shell: string; ok: boolean }
+  console.log(`[smoke] terminal ${JSON.stringify(result)}`)
 }
 
 /** Optionally saves a screenshot of the opened smoke chat (AIW_SMOKE_SCREENSHOT=<file.png>). */

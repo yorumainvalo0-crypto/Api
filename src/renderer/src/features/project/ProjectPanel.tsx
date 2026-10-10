@@ -13,8 +13,8 @@ const TABS: { id: TabId; label: string; icon: LucideIcon }[] = [
 ]
 
 /**
- * Right-side panel for the coding mode: file tree + viewer, git status/diff/commit and a
- * command runner. All tabs stay mounted (so terminal output survives tab switches) and are
+ * Right-side panel for the coding mode: file tree + viewer, git status/diff/commit and an
+ * interactive terminal. All tabs stay mounted (so the shell survives tab switches) and are
  * reset when `projectPath` changes.
  */
 export function ProjectPanel(props: { projectPath: string }) {

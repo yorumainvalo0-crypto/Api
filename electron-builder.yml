@@ -16,6 +16,9 @@ files:
 asarUnpack:
   # The Claude Code native runtime must live outside the asar archive to be executable.
   - node_modules/@anthropic-ai/claude-agent-sdk-*/**
+  # node-pty: native module plus helpers it starts by path (Windows: conpty worker/agent).
+  - node_modules/@lydell/node-pty/**
+  - node_modules/@lydell/node-pty-*/**
 win:
   target:
     - target: nsis

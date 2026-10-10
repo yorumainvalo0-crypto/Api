@@ -3,7 +3,7 @@
 Laufendes Protokoll zur Umsetzung von [`PLAN.md`](./PLAN.md).
 Zeiten in UTC. Legende: ✅ fertig · 🔄 in Arbeit · ⏳ offen · ⚠️ Problem/Hinweis
 
-**Letztes Update:** 2026-10-10 18:19
+**Letztes Update:** 2026-10-10 19:56
 
 ## Gesamtstatus
 
@@ -26,7 +26,7 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
 | Prüfung                                                                      | Ergebnis |
 | ---------------------------------------------------------------------------- | -------- |
 | TypeScript strict + ESLint                                                   | ✅       |
-| Unit- und Integrationstests (36 Dateien)                                     | ✅ 270   |
+| Unit- und Integrationstests (42 Dateien)                                     | ✅ 301   |
 | Integration mit echtem Runtime (Chat, Coding, Web, Medien, Add-ons, ComfyUI) | ✅       |
 | Integration: Handschrift-OCR (Ollama) und Office lesen/erstellen             | ✅       |
 | Live-Test echte Websuche (optional, `AIW_LIVE_WEB=1`)                        | ✅       |
@@ -34,6 +34,44 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
 | Windows-CI: Tests, Installer, Smoke-Test der installierten App               | ✅       |
 
 ## Protokoll
+
+### 2026-10-10 19:56 – v0.3.0: Terminal mit Claude Code, Cowork-Modus, Coding-Prompt, ComfyUI ✅
+
+- **Terminal** _(Opus-Subagent)_:
+  - Echtes interaktives Terminal: PowerShell unter Windows, als eigene Ansicht links und im
+    Projekt-Panel.
+  - `claude` (oder „Claude Code starten“) startet das eingebaute Claude Code mit Anbieter,
+    Modell, Effort und Skills der App. Es nutzt den eigenen Claude-Code-Systemprompt plus einen
+    kurzen Hinweis auf die App.
+  - Der Verbrauch läuft über einen lokalen Empfänger, nichts verlässt den PC, und erscheint in
+    der Statistik als „Terminal (Claude Code)“.
+  - Unter Linux mit echtem Terminal getestet. Unter Windows prüft der Smoke-Test der
+    installierten App PowerShell und `claude --version`.
+- **Cowork-Modus** (Schalter oben im Chat):
+  - Jev wählt pro Anfrage eine Rolle (Modell + Effort) und schätzt, ob sich die Aufgabe
+    aufteilen lässt.
+  - Das Modell kann über `delegate` Subagents mit eigenen Rollen starten, auch parallel und
+    über verschiedene Anbieter hinweg.
+  - Rollen sind unter Einstellungen → Cowork editierbar.
+  - Im Chat zeigt ein Hinweis, welche Rolle geantwortet hat.
+  - Die Statistik zeigt den Verbrauch je Agent: Hauptagent, jeder Subagent, Jev-Router,
+    Jev-Werkzeug, Terminal. Jev über TypeSafe erscheint als eigener Anbieter.
+- **Coding-Systemprompt** _(Recherche per Opus-Subagent)_:
+  - Claude-Modelle behalten Claude Code.
+  - Andere Modelle bekommen die Basis-Anweisungen von OpenAI Codex (Apache-2.0, Lizenz an der
+    Quelle geprüft, Angaben in `THIRD_PARTY_NOTICES.md`).
+  - Verglichen wurden opencode, Kilo Code, Cline, Roo Code, OpenHands, Aider, Continue und
+    Gemini CLI.
+- **ComfyUI:**
+  - Erkennt jetzt auch Einzeldatei-Modelle. Für Z-Image Turbo, Flux.1 dev/schnell und
+    Qwen-Image sind die offiziellen Abläufe eingebaut; die Werte stammen aus den
+    ComfyUI-Beispielworkflows.
+  - Workflow-Import ohne Platzhalter: Prompt, Negativ, Seed, Größe und Eingabebild werden
+    automatisch erkannt.
+  - Klare Meldungen, was fehlt.
+  - Sind andere Ports erreichbar (8000/8188), bietet die App die Adresse an.
+- **Getestet:** gesamt 301 Tests, darunter echte Agent-Durchläufe für Cowork (Jev-Routing +
+  Subagent) und Terminal (Claude Code im echten Terminal). Smoke-Test OK.
 
 ### 2026-10-10 18:19 – v0.2.3: Lesbare Auswahllisten, Claude kennt die App ✅
 

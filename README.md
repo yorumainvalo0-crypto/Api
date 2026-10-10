@@ -13,6 +13,8 @@ Der Agent-Kern ist das **Claude Agent SDK** (derselbe Kern wie Claude Code).
 | **Chat**             | Anthropic, OpenRouter (alle Modelle) oder Ollama; Live-Modellliste mit Preisen; Streaming; Kosten pro Chat; Chats werden gespeichert, durchsuchbar, als Markdown exportierbar                                                                     |
 | **Dateien senden**   | Drag & Drop, Strg+V (Screenshots), 📎 – Bilder, PDFs, Code/Text, beliebige Dateien                                                                                                                                                                |
 | **Coding-Agent**     | „Projekt öffnen“: Der Agent liest/ändert Dateien und führt Befehle aus – mit Freigaben (Erlauben / Immer / Ablehnen) und vier Modi; Diffs, Dateibaum, Git, Terminal; gefährliche Befehle werden immer blockiert                                   |
+| **Cowork**           | Jev (TypeSafe) wählt pro Anfrage die passende Rolle (Modell + Effort); Subagents mit eigenem Modell übernehmen Teilaufgaben parallel; Verbrauch je Agent in der Statistik                                                                         |
+| **Terminal**         | Echtes Terminal (PowerShell/Bash) als eigene Ansicht und im Projekt-Panel; „Claude Code starten“ nutzt Provider, Modell und Skills der App; Verbrauch in der Statistik                                                                            |
 | **Internet**         | Websuche (DuckDuckGo/Bing) und Seiten lesen im eingebauten Chromium – kostenlos, ohne Key, ohne Server                                                                                                                                            |
 | **Bilder & 3D**      | Bilder erzeugen/bearbeiten über OpenRouter **oder lokal mit ComfyUI** (kostenlos); echte 3D-Modelle (GLB) über ComfyUI-Workflows wie Hunyuan3D oder vom Agenten als OBJ/STL/PLY/glTF geschrieben; interaktiver 3D-Viewer, PDF-Vorschau in der App |
 | **Office**           | Word, Excel, PowerPoint (auch .doc/.xls/.odt/.ods/.rtf/.csv) lesen, in der App ansehen und vom Agenten neu erstellen lassen – ohne Office-Installation                                                                                            |
@@ -42,9 +44,11 @@ manuell aus dem Release laden.
 2. **Chat:** `Strg+N` neuer Chat. Dateien hineinziehen oder einfügen.
 3. **Coding:** „Projekt öffnen (Coding)“ (`Strg+Umschalt+O`) → Ordner wählen → Aufgabe
    beschreiben. Oben im Chat den Freigabe-Modus wählen; rechts Dateien, Git und Terminal.
-4. **Bilder/3D:** z. B. „Erzeuge ein Bild von …“ oder „Baue ein 3D-Modell eines Hauses“ –
+4. **Terminal** (Symbol unter Chat): Shell im Home-Ordner oder über „Ordner wählen …“; „Claude
+   Code starten“ tippt `claude` ein. `claude` nutzt Provider, Modell und Skills der App.
+5. **Bilder/3D:** z. B. „Erzeuge ein Bild von …“ oder „Baue ein 3D-Modell eines Hauses“ –
    Ergebnisse erscheinen im Chat und im Panel „Ergebnisse“.
-5. **Add-ons** (Puzzle-Symbol): Unter „Entdecken“ `anthropics/skills` eingeben oder die
+6. **Add-ons** (Puzzle-Symbol): Unter „Entdecken“ `anthropics/skills` eingeben oder die
    MCP-Registry durchsuchen.
 
 **Lokale Bilder & 3D mit ComfyUI:** [ComfyUI](https://github.com/comfyanonymous/ComfyUI)
