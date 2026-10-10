@@ -3,7 +3,7 @@
 Laufendes Protokoll zur Umsetzung von [`PLAN.md`](./PLAN.md).
 Zeiten in UTC. Legende: ✅ fertig · 🔄 in Arbeit · ⏳ offen · ⚠️ Problem/Hinweis
 
-**Letztes Update:** 2026-10-10 10:22
+**Letztes Update:** 2026-10-10 10:33
 
 ## Gesamtstatus
 
@@ -15,24 +15,44 @@ Zeiten in UTC. Legende: ✅ fertig · 🔄 in Arbeit · ⏳ offen · ⚠️ Prob
 | 3     | Internet                   | ✅     | 100 %       |
 | 4     | Medien: Bilder & 3D        | ✅     | 100 %       |
 | 5     | Skills & Add-ons           | ✅     | 100 %       |
-| 6     | Feinschliff & Distribution | 🔄     | 40 %        |
+| 6     | Feinschliff & Distribution | ✅     | 100 %       |
 
-**Gesamt: ~90 %** (6 von 7 Phasen, Phase 6 begonnen)
+**Gesamt: 100 %** (alle 7 Phasen umgesetzt und getestet)
 
 ## Teststand
 
 Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
 
-| Prüfung                                                                | Ergebnis         |
-| ---------------------------------------------------------------------- | ---------------- |
-| TypeScript strict + ESLint                                             | ✅               |
-| Unit-Tests (21 Dateien)                                                | ✅ 165           |
-| Integration mit echtem Runtime (Chat, Coding, Web, Medien, Add-ons)    | ✅               |
-| Live-Test echte Websuche (optional, `AIW_LIVE_WEB=1`)                  | ✅               |
-| Smoke-Test App: Chat, Coding, Medien/3D, Chromium-Loader + Screenshots | ✅               |
-| Windows-CI                                                             | 🔄 Fixes gepusht |
+| Prüfung                                                                | Ergebnis |
+| ---------------------------------------------------------------------- | -------- |
+| TypeScript strict + ESLint                                             | ✅       |
+| Unit-Tests (21 Dateien)                                                | ✅ 165   |
+| Integration mit echtem Runtime (Chat, Coding, Web, Medien, Add-ons)    | ✅       |
+| Live-Test echte Websuche (optional, `AIW_LIVE_WEB=1`)                  | ✅       |
+| Smoke-Test App: Chat, Coding, Medien/3D, Chromium-Loader + Screenshots | ✅       |
+| Windows-CI: Tests, Installer, Smoke-Test der installierten App         | ✅       |
 
 ## Protokoll
+
+### 2026-10-10 10:33 – Phase 6 abgeschlossen ✅ · Projekt komplett
+
+- **Auto-Update** über GitHub Releases. Das Release baut sich automatisch, sobald ein Tag `v*`
+  gepusht wird (`.github/workflows/release.yml`). Den Button „Nach Updates suchen“ gibt es in
+  den Einstellungen.
+- **Kostenlimit pro Anfrage** (Einstellungen). Der Agent stoppt mit einer klaren Meldung.
+- **Fehler-Absicherung:** Statt eines leeren Fensters erscheint bei UI-Fehlern ein
+  Hinweis mit „Neu laden“.
+- **Kleineres Bundle:** Die Oberfläche ist minifiziert, das Haupt-Bundle schrumpft von 3,7 MB
+  auf 1,3 MB.
+- **README** mit Funktionen, Installation, ersten Schritten und Datenablage.
+- **Windows-CI grün** für Phase 4/5 und Phase 6: alle Tests, Installer-Build und Smoke-Test
+  der installierten App unter Windows. Der Installer liegt als Artefakt `ai-workbench-windows`
+  bereit (~200 MB, inkl. Claude-Code-Runtime).
+- **Bewusst offen bzw. Hinweise:**
+  - Ein Tray-Icon ist nicht umgesetzt.
+  - Es gibt keine Code-Signatur; SmartScreen warnt beim ersten Start.
+  - Auto-Update funktioniert nur bei einem öffentlichen Repo.
+  - Ein echter Test mit deinen API-Keys steht noch aus.
 
 ### 2026-10-10 10:22 – Phase 4 und 5 abgeschlossen ✅, Phase 6 begonnen
 
