@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { DEFAULT_SETTINGS } from '@shared/schemas/settings'
+import { DEFAULT_SETTINGS, SettingsPatchSchema } from '@shared/schemas/settings'
 import { SettingsStore } from '../src/main/storage/settings-store'
 import { SecretStore, type Cipher } from '../src/main/storage/secret-store'
 
@@ -36,6 +36,26 @@ describe('SettingsStore', () => {
     expect(reloaded.activeProvider).toBe('ollama')
     expect(reloaded.models.ollama).toBe('m')
     expect(reloaded.models.anthropic).toBe('')
+  })
+
+  it('keeps untouched settings when a patch comes through the IPC schema', () => {
+    const store = new SettingsStore(join(dir, 's.json'))
+    store.update({
+      activeProvider: 'openrouter',
+      models: { ...DEFAULT_SETTINGS.models, openrouter: 'x/y' },
+    })
+    // Regression: the patch schema must not inject defaults for missing keys.
+    const patch = SettingsPatchSchema.parse({ theme: 'dark' })
+    expect(patch).toEqual({ theme: 'dark' })
+    const next = store.update(patch)
+    expect(next.activeProvider).toBe('openrouter')
+    expect(next.models.openrouter).toBe('x/y')
+    // Partial model maps merge per provider.
+    expect(store.update(SettingsPatchSchema.parse({ models: { ollama: 'q' } })).models).toEqual({
+      anthropic: '',
+      openrouter: 'x/y',
+      ollama: 'q',
+    })
   })
 
   it('rejects invalid values', () => {

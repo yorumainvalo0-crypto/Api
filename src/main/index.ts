@@ -15,6 +15,9 @@ import { SettingsStore } from './storage/settings-store'
 import { storeAttachment } from './workspace/attachments'
 import { handleFileProtocol, registerFileProtocolScheme } from './workspace/file-protocol'
 import { runSmokeTest } from './smoke'
+import { createChromiumLoader, createSmartLoader } from './web/electron-loader'
+import { createWebMcpServer } from './web/mcp-server'
+import { createFetchLoader, WebClient } from './web/web-client'
 
 const isSmokeTest = process.argv.includes('--smoke-test')
 
@@ -79,7 +82,14 @@ function bootstrap(): void {
     ollamaBaseUrl: settings.get().ollamaBaseUrl,
   })
 
+  const fetchLoader = createFetchLoader()
+  const web = new WebClient({
+    searchLoader: fetchLoader,
+    pageLoader: createSmartLoader(fetchLoader, createChromiumLoader()),
+  })
+
   const sessions = new SessionManager({
+    createWebServer: () => createWebMcpServer(web),
     getSettings: () => settings.get(),
     secrets,
     chats,
@@ -136,6 +146,20 @@ function bootstrap(): void {
       }
       return { attachments, errors }
     },
+    'chats:create-project': ({ chatId, projectPath }) =>
+      sessions.createProjectChat({ ...(chatId ? { chatId } : {}), projectPath }),
+    'chats:set-permission-mode': async ({ chatId, mode }) => {
+      await sessions.setPermissionMode(chatId, mode)
+      return { ok: true }
+    },
+    'dialog:open-folder': async () => {
+      if (!mainWindow) return null
+      const result = await dialog.showOpenDialog(mainWindow, {
+        title: 'Projektordner öffnen',
+        properties: ['openDirectory', 'createDirectory'],
+      })
+      return result.canceled ? null : (result.filePaths[0] ?? null)
+    },
     'dialog:open-files': async () => {
       if (!mainWindow) return []
       const result = await dialog.showOpenDialog(mainWindow, {
@@ -145,6 +169,9 @@ function bootstrap(): void {
     },
     'agent:send': (request) => ({ accepted: sessions.send(request) }),
     'agent:cancel': ({ chatId }) => ({ ok: sessions.cancel(chatId) }),
+    'agent:permission-respond': ({ requestId, decision, message }) => ({
+      ok: sessions.respondToPermission(requestId, decision, message),
+    }),
     ...createProjectHandlers({ getTarget: () => mainWindow?.webContents }),
   })
 

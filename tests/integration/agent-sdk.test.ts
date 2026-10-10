@@ -25,7 +25,7 @@ describe('Claude Agent SDK runtime', () => {
 
   afterAll(async () => {
     await mock.close()
-    rmSync(dir, { recursive: true, force: true })
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
   })
 
   it('streams a reply through an Anthropic-compatible endpoint', async () => {

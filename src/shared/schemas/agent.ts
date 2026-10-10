@@ -5,10 +5,11 @@ export const ChatRequestSchema = z.object({
   chatId: z.string().min(1),
   prompt: z.string(),
   attachments: z.array(AttachmentSchema).default([]),
-  /** Working directory for the agent. Defaults to the chat workspace. */
-  cwd: z.string().optional(),
 })
 export type ChatRequest = z.infer<typeof ChatRequestSchema>
+
+export const PermissionDecisionSchema = z.enum(['allow', 'allow-always', 'deny'])
+export type PermissionDecision = z.infer<typeof PermissionDecisionSchema>
 
 const base = { chatId: z.string() }
 
@@ -24,6 +25,24 @@ export const AgentEventSchema = z.discriminatedUnion('type', [
     name: z.string(),
     input: z.unknown(),
   }),
+  z.object({
+    ...base,
+    type: z.literal('tool-result'),
+    toolUseId: z.string(),
+    content: z.string(),
+    isError: z.boolean(),
+  }),
+  z.object({
+    ...base,
+    type: z.literal('permission-request'),
+    requestId: z.string(),
+    toolName: z.string(),
+    input: z.unknown(),
+    title: z.string().nullable(),
+    description: z.string().nullable(),
+    blockedPath: z.string().nullable(),
+  }),
+  z.object({ ...base, type: z.literal('permission-resolved'), requestId: z.string() }),
   z.object({
     ...base,
     type: z.literal('result'),

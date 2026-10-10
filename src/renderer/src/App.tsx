@@ -43,6 +43,14 @@ export function App() {
 
   useTheme(settings?.theme ?? 'system')
 
+  const openProject = async () => {
+    const projectPath = await api.invoke('dialog:open-folder')
+    if (!projectPath) return
+    const chat = await api.invoke('chats:create-project', { projectPath })
+    refreshChats()
+    setActiveChatId(chat.id)
+  }
+
   return (
     <div className="flex h-full">
       <nav className="flex w-14 shrink-0 flex-col items-center gap-2 border-r border-zinc-200 bg-zinc-50 py-3 dark:border-zinc-800 dark:bg-zinc-900">
@@ -65,6 +73,7 @@ export function App() {
               activeId={activeChatId}
               onSelect={setActiveChatId}
               onNew={() => setActiveChatId(crypto.randomUUID())}
+              onOpenProject={() => void openProject()}
               onChanged={refreshChats}
             />
             <ChatView

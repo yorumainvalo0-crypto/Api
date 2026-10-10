@@ -3,7 +3,7 @@
 Laufendes Protokoll zur Umsetzung von [`PLAN.md`](./PLAN.md).
 Zeiten in UTC. Legende: ✅ fertig · 🔄 in Arbeit · ⏳ offen · ⚠️ Problem/Hinweis
 
-**Letztes Update:** 2026-10-10 09:49
+**Letztes Update:** 2026-10-10 10:06
 
 ## Gesamtstatus
 
@@ -11,30 +11,85 @@ Zeiten in UTC. Legende: ✅ fertig · 🔄 in Arbeit · ⏳ offen · ⚠️ Prob
 | ----- | -------------------------- | ------ | ----------- |
 | 0     | Fundament & Spike          | ✅     | 100 %       |
 | 1     | Chat mit allen Providern   | ✅     | 100 %       |
-| 2     | Coding-Agent               | 🔄     | 0 %         |
-| 3     | Internet                   | ⏳     | 0 %         |
-| 4     | Medien: Bilder & 3D        | ⏳     | 0 %         |
+| 2     | Coding-Agent               | ✅     | 100 %       |
+| 3     | Internet                   | ✅     | 100 %       |
+| 4     | Medien: Bilder & 3D        | 🔄     | 0 %         |
 | 5     | Skills & Add-ons           | ⏳     | 0 %         |
 | 6     | Feinschliff & Distribution | ⏳     | 0 %         |
 
-**Gesamt: ~29 %** (2 von 7 Phasen)
+**Gesamt: ~57 %** (4 von 7 Phasen)
 
 ## Teststand
 
-Befehl: `npm run check` (Typecheck → Lint → Unit-/Integrationstests → Build → Smoke-Test)
+Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
 
-| Prüfung                                                                        | Ergebnis     |
-| ------------------------------------------------------------------------------ | ------------ |
-| TypeScript strict (main, preload, renderer, tests)                             | ✅           |
-| ESLint (typescript-eslint strict, React-Hooks)                                 | ✅           |
-| Unit-Tests (Provider, Settings, Secrets, Normalisierung, Modelle, DB, Dateien) | ✅ 43/43     |
-| Integration: echter Runtime ↔ Mock-API (Streaming, Bilder, Fortsetzen)         | ✅ 4/4       |
-| Build (electron-vite)                                                          | ✅           |
-| Smoke-Test App (UI, IPC, Anhang → API, Speicherung, Datei-Schutz)              | ✅           |
-| Smoke-Test gepackte App                                                        | ✅ Linux     |
-| Windows: Tests + Installer + Smoke-Test der installierten App (GitHub CI)      | ✅ (Phase 0) |
+| Prüfung                                                                 | Ergebnis           |
+| ----------------------------------------------------------------------- | ------------------ |
+| TypeScript strict + ESLint                                              | ✅                 |
+| Unit-Tests (Provider, Speicher, Dateien, Freigaben, Diff, Web, Projekt) | ✅ 122             |
+| Integration mit echtem Claude-Runtime (Chat, Bilder, Coding, Websuche)  | ✅ 9               |
+| Live-Test echte Websuche (optional, `AIW_LIVE_WEB=1`)                   | ✅                 |
+| Smoke-Test App: Chat + Anhang, Coding mit Freigabe, Chromium-Loader     | ✅                 |
+| Windows-CI (Tests, Installer, Smoke-Test der installierten App)         | ⚠️ siehe Protokoll |
 
 ## Protokoll
+
+### 2026-10-10 10:06 – Phase 2 und 3 abgeschlossen ✅
+
+**Phase 2 – Coding-Agent**
+
+- **Projekt öffnen (Coding):** Ein Chat wird an einen Ordner gebunden. Der Agent hat dort alle
+  Claude-Code-Werkzeuge (Lesen, Schreiben, Bearbeiten, Bash/PowerShell, Suche) und liest die
+  `CLAUDE.md` des Projekts.
+- **Freigaben wie bei Claude Code:** Karten mit „Erlauben“, „Für diese Sitzung immer erlauben“
+  und „Ablehnen“. Vier Modi lassen sich auch während einer laufenden Antwort umschalten:
+  „Immer fragen“, „Dateiänderungen erlauben“, „Nur planen“ und „Alles erlauben“.
+- **Schutz vor gefährlichen Befehlen:** Blockiert wird auch bei „Alles erlauben“:
+  - Löschen von Laufwerk, Home- oder Systemordnern (Linux und Windows)
+  - Formatieren
+  - Herunterfahren
+  - Fork-Bomben
+  - Eingriffe in die Registry bzw. den Bootloader
+- **Tool-Anzeige:** Jede Aktion erscheint als aufklappbare Karte, für Bearbeitungen mit
+  farbigem Diff. Text und Aktionen stehen in der richtigen Reihenfolge und werden mitgespeichert.
+- **Projekt-Panel** _(Opus-Subagent)_:
+  - Dateibaum mit Syntax-Highlighting
+  - Git: Status, Diff, Commit
+  - Terminal: xterm.js, PowerShell unter Windows, ohne native Module
+  - Pfade außerhalb des Projekts werden abgelehnt
+- **Getestet:**
+  - Mit echtem Runtime, wobei der Agent wirklich Dateien schreibt:
+    - Freigabe führt zur Datei.
+    - Ablehnen führt zu keiner Datei.
+    - Im Auto-Modus wird nicht gefragt.
+    - `rm -rf /` wird blockiert.
+  - Dazu 26 Fälle für gefährliche bzw. harmlose Befehle.
+  - 25 Tests für das Projekt-Panel inklusive eines echten Git-Repos.
+
+**Phase 3 – Internet (kostenlos, ohne Server, ohne Key)**
+
+- **Werkzeuge** `web_search` und `web_fetch` als eingebauter MCP-Server, in Chat und Coding-Modus.
+  Sie brauchen keine Freigabe, weil sie nur lesen.
+- **Suchkette:** DuckDuckGo Lite → Bing → DuckDuckGo → Wikipedia. Bot-Abfragen werden erkannt und
+  übersprungen. Dazu kommen 15 Minuten Cache und mindestens 1 Sekunde Abstand pro Website.
+- **Seiten lesen:** Zuerst schnell per HTTP. Bei JavaScript-Seiten wird im versteckten Chromium
+  gerendert, ohne Downloads und ohne Berechtigungen. Readability extrahiert den Hauptinhalt
+  als Markdown.
+- **Einstellung „Internet“** zum Ein- und Ausschalten.
+- **Getestet:**
+  - Parser mit echten, mitgeschnittenen Suchseiten
+  - Live-Suche im Internet
+  - Der Agent nutzt die Suche über den echten Runtime.
+  - Chromium rendert eine JavaScript-Seite in der App.
+
+**Behobene Fehler**
+
+- ⚠️ **Einstellungen:** Ein Teil-Update setzte andere Einstellungen auf den Standard zurück,
+  z. B. wechselte die Modellwahl unter OpenRouter zurück zu Anthropic. Ist behoben und durch
+  einen Regressionstest abgesichert.
+- ⚠️ **Windows-CI (Phase 1):** Alle Tests liefen grün, nur das Aufräumen scheiterte, weil
+  Windows die offene Datenbankdatei sperrt. Die Tests schließen die Datenbank jetzt vorher.
+- **Optik:** Der Platzhalter im Eingabefeld wurde gekürzt (Screenshot geprüft).
 
 ### 2026-10-10 09:49 – Phase 1 abgeschlossen ✅
 

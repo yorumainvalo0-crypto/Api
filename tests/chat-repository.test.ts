@@ -34,8 +34,19 @@ describe('ChatRepository', () => {
     r.addMessage({
       chatId: 'c1',
       role: 'assistant',
-      text: 'Hi',
-      tools: ['Read'],
+      parts: [
+        {
+          type: 'tool',
+          call: {
+            id: 't1',
+            name: 'Read',
+            input: { file_path: 'a.ts' },
+            result: 'x',
+            isError: false,
+          },
+        },
+        { type: 'text', text: 'Hi' },
+      ],
       costUsd: 0.01,
       durationMs: 1200,
     })
@@ -44,7 +55,9 @@ describe('ChatRepository', () => {
     const chat = r.get('c1')
     expect(chat?.messages.map((m) => m.role)).toEqual(['user', 'assistant', 'assistant'])
     expect(chat?.messages[0]?.attachments).toEqual([attachment])
-    expect(chat?.messages[1]?.tools).toEqual(['Read'])
+    expect(chat?.messages[1]?.parts.map((p) => p.type)).toEqual(['tool', 'text'])
+    // The plain text column is derived from the text parts.
+    expect(chat?.messages[1]?.text).toBe('Hi')
     expect(chat?.messages[2]?.error).toBe('boom')
     expect(chat?.totalCostUsd).toBeCloseTo(0.03)
   })
@@ -55,6 +68,37 @@ describe('ChatRepository', () => {
     r.create({ id: 'c2', title: 'B', provider: 'anthropic', model: 'm' })
     r.addMessage({ chatId: 'c1', role: 'user', text: 'neu' })
     expect(r.list()[0]?.id).toBe('c1')
+  })
+
+  it('creates coding chats with project folder and permission mode', () => {
+    const r = repo()
+    r.create({
+      id: 'p1',
+      title: 'Projekt',
+      provider: 'anthropic',
+      model: 'm',
+      mode: 'code',
+      projectPath: '/work/app',
+    })
+    expect(r.summary('p1')).toMatchObject({
+      mode: 'code',
+      projectPath: '/work/app',
+      permissionMode: 'default',
+    })
+    r.setPermissionMode('p1', 'acceptEdits')
+    expect(r.summary('p1')?.permissionMode).toBe('acceptEdits')
+  })
+
+  it('reads messages written by schema v1 (text + tool names)', () => {
+    const db = openDatabase(':memory:')
+    const r = new ChatRepository(db)
+    r.create({ id: 'c1', title: 'Alt', provider: 'anthropic', model: 'm' })
+    db.prepare(
+      `INSERT INTO messages (id, chat_id, role, text, tools_json, created_at)
+       VALUES ('m1', 'c1', 'assistant', 'Alte Antwort', '["Read"]', 1)`,
+    ).run()
+    const parts = r.get('c1')?.messages[0]?.parts
+    expect(parts?.map((p) => p.type)).toEqual(['tool', 'text'])
   })
 
   it('remembers the SDK session id for resuming', () => {

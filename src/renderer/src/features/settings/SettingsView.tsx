@@ -67,6 +67,21 @@ export function SettingsView(props: { settings: Settings; onChange: (s: Settings
         ))}
 
         <section className="space-y-2">
+          <h2 className="font-medium">Internet</h2>
+          <label className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={settings.webAccess}
+              onChange={(e) => void update({ webAccess: e.target.checked })}
+            />
+            Websuche und Seitenabruf für den Agenten erlauben (kostenlos, ohne API-Key)
+          </label>
+          <p className="text-xs text-zinc-500">
+            Suche über DuckDuckGo bzw. Bing, Seiten werden lokal im eingebauten Chromium geladen.
+          </p>
+        </section>
+
+        <section className="space-y-2">
           <h2 className="font-medium">Darstellung</h2>
           <select
             className="rounded-md border border-zinc-300 bg-transparent px-2 py-1.5 text-sm dark:border-zinc-700"

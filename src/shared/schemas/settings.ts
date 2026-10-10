@@ -21,13 +21,29 @@ export const SettingsSchema = z.object({
     .default({ anthropic: '', openrouter: '', ollama: '' }),
   ollamaBaseUrl: z.url().default('http://localhost:11434'),
   theme: z.enum(['system', 'light', 'dark']).default('system'),
+  /** Allow the agent to search the web and read pages (free, no API key). */
+  webAccess: z.boolean().default(true),
 })
 export type Settings = z.infer<typeof SettingsSchema>
 
 export const DEFAULT_SETTINGS: Settings = SettingsSchema.parse({})
 
-/** Partial update sent from the renderer; validated in the main process. */
-export const SettingsPatchSchema = SettingsSchema.partial()
+/**
+ * Partial update sent from the renderer; validated in the main process.
+ * Declared without defaults on purpose: `.partial()` would fill in defaults for missing keys
+ * and silently reset settings the user did not touch.
+ */
+export const SettingsPatchSchema = z
+  .object({
+    activeProvider: ProviderIdSchema,
+    models: z
+      .object({ anthropic: z.string(), openrouter: z.string(), ollama: z.string() })
+      .partial(),
+    ollamaBaseUrl: z.url(),
+    theme: z.enum(['system', 'light', 'dark']),
+    webAccess: z.boolean(),
+  })
+  .partial()
 export type SettingsPatch = z.infer<typeof SettingsPatchSchema>
 
 /** Secret status exposed to the renderer – never the secret itself. */

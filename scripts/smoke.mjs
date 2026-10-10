@@ -1,21 +1,36 @@
 // Launches the built app headlessly with --smoke-test and fails if it does not report OK.
 // A local Anthropic-compatible mock is started so a full chat turn can be verified without API keys.
 import { spawn } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import electronPath from 'electron'
 import { startMockAnthropic } from './mock-anthropic.ts'
 
 const MOCK_REPLY = 'Smoke-Antwort vom Mock'
-// Echo how many images reached the API so the attachment pipeline is verified end to end.
+const userData = mkdtempSync(join(tmpdir(), 'aiw-smoke-'))
+// Project folder for the coding-agent part of the smoke test.
+const project = join(userData, 'projekt')
+mkdirSync(project)
+const PROJECT_FILE = join(project, 'smoke.txt')
+
 const mock = await startMockAnthropic((body) => {
-  const blocks = (body?.messages ?? [])
+  const userBlocks = (body?.messages ?? [])
     .filter((m) => m.role === 'user' && Array.isArray(m.content))
     .flatMap((m) => m.content)
-  return `${MOCK_REPLY} (Bilder: ${blocks.filter((b) => b.type === 'image').length})`
+  const text = userBlocks.map((b) => b.text ?? '').join(' ')
+  // Coding turn: write a file through the agent's Write tool, then finish.
+  if (text.includes('SMOKE-CODE')) {
+    return userBlocks.some((b) => b.type === 'tool_result')
+      ? { text: 'Datei angelegt.' }
+      : {
+          text: 'Ich schreibe die Datei.',
+          toolUse: { name: 'Write', input: { file_path: PROJECT_FILE, content: 'vom Agenten' } },
+        }
+  }
+  // Chat turn: echo how many images reached the API to verify the attachment pipeline.
+  return `${MOCK_REPLY} (Bilder: ${userBlocks.filter((b) => b.type === 'image').length})`
 })
-const userData = mkdtempSync(join(tmpdir(), 'aiw-smoke-'))
 // `--packaged <executable>` runs the smoke test against a packaged build instead of the sources.
 const packagedIndex = process.argv.indexOf('--packaged')
 const packaged = packagedIndex > -1 ? process.argv[packagedIndex + 1] : undefined
@@ -33,7 +48,12 @@ if (process.platform === 'linux' && !process.env.DISPLAY) {
 }
 
 const child = spawn(command, commandArgs, {
-  env: { ...process.env, AIW_USER_DATA: userData, AIW_SMOKE_MOCK_URL: mock.url },
+  env: {
+    ...process.env,
+    AIW_USER_DATA: userData,
+    AIW_SMOKE_MOCK_URL: mock.url,
+    AIW_SMOKE_PROJECT: project,
+  },
   stdio: ['ignore', 'pipe', 'pipe'],
 })
 
@@ -43,7 +63,8 @@ child.stderr.on('data', (d) => (output += d))
 
 child.on('exit', async (code) => {
   await mock.close()
-  rmSync(userData, { recursive: true, force: true })
+  const codeOk = existsSync(PROJECT_FILE) && readFileSync(PROJECT_FILE, 'utf8') === 'vom Agenten'
+  rmSync(userData, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
   console.log(
     output
       .split('\n')
@@ -51,11 +72,11 @@ child.on('exit', async (code) => {
       .join('\n'),
   )
   const chatOk = output.includes(`"chatText":"${MOCK_REPLY} (Bilder: 1)"`)
-  if (code === 0 && output.includes('[smoke] OK') && chatOk) {
+  if (code === 0 && output.includes('[smoke] OK') && chatOk && codeOk) {
     console.log('Smoke test passed.')
     process.exit(0)
   }
   console.error(output)
-  console.error(`Smoke test failed (exit code ${code}, chat ok: ${chatOk}).`)
+  console.error(`Smoke test failed (exit code ${code}, chat ok: ${chatOk}, code ok: ${codeOk}).`)
   process.exit(1)
 })

@@ -27,7 +27,10 @@
     "@anthropic-ai/claude-agent-sdk": "0.3.296",
     "@anthropic-ai/sdk": "0.133.0",
     "@modelcontextprotocol/sdk": "1.32.1",
+    "@mozilla/readability": "0.6.0",
     "electron-log": "5.4.4",
+    "linkedom": "0.18.13",
+    "turndown": "7.2.4",
     "zod": "4.6.5"
   },
   "devDependencies": {
@@ -36,7 +39,10 @@
     "@types/node": "22.20.5",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",
+    "@types/turndown": "5.0.6",
     "@vitejs/plugin-react": "5.2.0",
+    "@xterm/addon-fit": "0.11.0",
+    "@xterm/xterm": "6.0.0",
     "electron": "44.7.0",
     "electron-builder": "26.15.3",
     "electron-vite": "5.0.0",

@@ -1,5 +1,6 @@
 import { writeFileSync } from 'node:fs'
 import { app, type BrowserWindow } from 'electron'
+import { createChromiumLoader } from './web/electron-loader'
 import log from 'electron-log/main'
 
 /**
@@ -17,6 +18,7 @@ export function runSmokeTest(win: BrowserWindow): void {
 
   const timeout = setTimeout(() => fail('timeout'), 60_000)
   const mockUrl = process.env['AIW_SMOKE_MOCK_URL'] ?? ''
+  const projectPath = process.env['AIW_SMOKE_PROJECT'] ?? ''
 
   win.webContents.once('did-fail-load', (_e, code, desc) => fail(`did-fail-load ${code} ${desc}`))
   win.webContents.once('did-finish-load', () => {
@@ -68,6 +70,30 @@ export function runSmokeTest(win: BrowserWindow): void {
         const chat = await window.api.invoke('chats:get', { chatId: 'smoke' })
         result.persisted = chat?.messages.map((m) => m.role + ':' + m.attachments.length).join(',')
         result.listed = (await window.api.invoke('chats:list')).some((c) => c.id === 'smoke')
+
+        // Coding agent: open a project, approve the Write tool through the UI channel.
+        const projectPath = ${JSON.stringify(projectPath)}
+        if (projectPath) {
+          const codeChat = await window.api.invoke('chats:create-project', { chatId: 'smoke-code', projectPath })
+          result.codeMode = codeChat.mode
+          const codeEvents = []
+          const codeDone = new Promise((resolve) => {
+            const off = window.api.on('agent:event', async (e) => {
+              if (e.chatId !== 'smoke-code') return
+              codeEvents.push(e.type)
+              if (e.type === 'permission-request') {
+                await window.api.invoke('agent:permission-respond', { requestId: e.requestId, decision: 'allow' })
+              }
+              if (e.type === 'error') result.codeError = e.message
+              if (e.type === 'done') { off(); resolve() }
+            })
+          })
+          await window.api.invoke('agent:send', { chatId: 'smoke-code', prompt: 'SMOKE-CODE bitte Datei anlegen' })
+          await codeDone
+          result.codeEvents = [...new Set(codeEvents)]
+          const codeChatDetail = await window.api.invoke('chats:get', { chatId: 'smoke-code' })
+          result.codeParts = codeChatDetail?.messages.at(-1)?.parts.map((p) => p.type).join(',')
+        }
       }
       return result
     })()`
@@ -88,11 +114,23 @@ export function runSmokeTest(win: BrowserWindow): void {
             return fail('file protocol served a file outside data dir')
           if (result['persisted'] !== 'user:1,assistant:0') return fail('chat not persisted')
           if (result['listed'] !== true) return fail('chat missing from list')
+          if (projectPath) {
+            if (result['codeError']) return fail(`code error: ${String(result['codeError'])}`)
+            if (result['codeParts'] !== 'text,tool,text') return fail('code reply parts wrong')
+            const codeEvents = result['codeEvents'] as string[] | undefined
+            if (!codeEvents?.includes('permission-request')) return fail('no permission request')
+          }
         }
-        void captureScreenshot(win).then(() => {
-          console.log('[smoke] OK')
-          app.exit(0)
-        })
+        void checkChromiumLoader(mockUrl)
+          .then((ok) => {
+            if (!ok) throw new Error('hidden Chromium loader did not render JavaScript content')
+            return captureScreenshot(win)
+          })
+          .then(() => {
+            console.log('[smoke] OK')
+            app.exit(0)
+          })
+          .catch((error: unknown) => fail(String(error)))
       })
       .catch((error: unknown) => fail(String(error)))
   })
@@ -105,10 +143,19 @@ async function captureScreenshot(win: BrowserWindow): Promise<void> {
   await win.webContents.executeJavaScript(`(async () => {
     window.dispatchEvent(new Event('focus'))
     await new Promise((r) => setTimeout(r, 300))
-    document.querySelector('button[title="Hallo"]')?.click()
+    const target = ${JSON.stringify(process.env['AIW_SMOKE_SCREENSHOT_CHAT'] ?? 'Hallo')}
+    document.querySelector('button[title="' + target + '"]')?.click()
     await new Promise((r) => setTimeout(r, 800))
   })()`)
   const image = await win.webContents.capturePage()
   writeFileSync(target, image.toPNG())
   console.log(`[smoke] screenshot ${target}`)
+}
+
+/** Verifies the web_fetch browser path: a JS-rendered page must come back with its content. */
+async function checkChromiumLoader(mockUrl: string): Promise<boolean> {
+  if (!mockUrl) return true
+  const page = await createChromiumLoader(15_000, 300)(`${mockUrl}/js-page`)
+  console.log(`[smoke] chromium loader status ${page.status}`)
+  return page.body.includes('Von JavaScript gerendert')
 }

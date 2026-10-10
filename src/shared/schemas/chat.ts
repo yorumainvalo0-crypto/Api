@@ -30,13 +30,31 @@ export type AttachmentInput = z.infer<typeof AttachmentInputSchema>
 
 export const MessageRoleSchema = z.enum(['user', 'assistant'])
 
+/** One tool invocation by the agent, with its (truncated) result once available. */
+export const ToolCallSchema = z.object({
+  id: z.string(),
+  name: z.string(),
+  input: z.unknown(),
+  result: z.string().nullable(),
+  isError: z.boolean(),
+})
+export type ToolCall = z.infer<typeof ToolCallSchema>
+
+/** Ordered content of an assistant message: text interleaved with tool calls. */
+export const MessagePartSchema = z.discriminatedUnion('type', [
+  z.object({ type: z.literal('text'), text: z.string() }),
+  z.object({ type: z.literal('tool'), call: ToolCallSchema }),
+])
+export type MessagePart = z.infer<typeof MessagePartSchema>
+
 export const ChatMessageSchema = z.object({
   id: z.string(),
   chatId: z.string(),
   role: MessageRoleSchema,
   text: z.string(),
   attachments: z.array(AttachmentSchema),
-  tools: z.array(z.string()),
+  /** Assistant messages only; empty for user messages. */
+  parts: z.array(MessagePartSchema),
   error: z.string().nullable(),
   costUsd: z.number().nullable(),
   durationMs: z.number().nullable(),
@@ -44,11 +62,34 @@ export const ChatMessageSchema = z.object({
 })
 export type ChatMessage = z.infer<typeof ChatMessageSchema>
 
+export const ChatModeSchema = z.enum(['chat', 'code'])
+export type ChatMode = z.infer<typeof ChatModeSchema>
+
+/** How the coding agent asks before using tools (maps to the SDK permission modes). */
+export const AgentPermissionModeSchema = z.enum([
+  'default',
+  'acceptEdits',
+  'plan',
+  'bypassPermissions',
+])
+export type AgentPermissionMode = z.infer<typeof AgentPermissionModeSchema>
+
+export const PERMISSION_MODE_LABELS: Record<AgentPermissionMode, string> = {
+  default: 'Immer fragen',
+  acceptEdits: 'Dateiänderungen erlauben',
+  plan: 'Nur planen',
+  bypassPermissions: 'Alles erlauben',
+}
+
 export const ChatSummarySchema = z.object({
   id: z.string(),
   title: z.string(),
   provider: ProviderIdSchema,
   model: z.string(),
+  mode: ChatModeSchema,
+  /** Project folder the coding agent works in (code mode only). */
+  projectPath: z.string().nullable(),
+  permissionMode: AgentPermissionModeSchema,
   createdAt: z.number(),
   updatedAt: z.number(),
 })

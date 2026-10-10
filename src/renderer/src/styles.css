@@ -58,3 +58,7 @@ body {
 .prose-chat a {
   @apply text-blue-600 underline dark:text-blue-400;
 }
+
+.tool-pre {
+  @apply overflow-auto rounded-md bg-zinc-900 p-2 font-mono text-xs leading-relaxed whitespace-pre text-zinc-200;
+}

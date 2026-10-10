@@ -32,13 +32,15 @@ describe('SessionManager with the real runtime', () => {
   let mock: MockAnthropic
   let dir: string
   let chats: ChatRepository
+  let db: ReturnType<typeof openDatabase>
   let manager: SessionManager
   const events: AgentEvent[] = []
 
   beforeAll(async () => {
     mock = await startMockAnthropic(describeRequest)
     dir = mkdtempSync(join(tmpdir(), 'aiw-sm-'))
-    chats = new ChatRepository(openDatabase(join(dir, 'w.db')))
+    db = openDatabase(join(dir, 'w.db'))
+    chats = new ChatRepository(db)
     const settings: Settings = {
       ...DEFAULT_SETTINGS,
       activeProvider: 'ollama',
@@ -62,7 +64,9 @@ describe('SessionManager with the real runtime', () => {
 
   afterAll(async () => {
     await mock.close()
-    rmSync(dir, { recursive: true, force: true })
+    // Windows keeps open SQLite files locked, so close before deleting.
+    db.close()
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 })
   })
 
   function waitForDone(chatId: string): Promise<void> {

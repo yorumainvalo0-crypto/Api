@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Pencil, Plus, Trash2 } from 'lucide-react'
+import { FolderOpen, Pencil, Plus, Trash2 } from 'lucide-react'
 import type { ChatSummary } from '@shared/schemas/chat'
 import { api } from '../../lib/api'
 
@@ -8,6 +8,7 @@ export function ChatSidebar(props: {
   activeId: string
   onSelect: (id: string) => void
   onNew: () => void
+  onOpenProject: () => void
   onChanged: () => void
 }) {
   const [editing, setEditing] = useState<string | null>(null)
@@ -35,6 +36,13 @@ export function ChatSidebar(props: {
           className="flex w-full items-center gap-2 rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
         >
           <Plus size={16} /> Neuer Chat
+        </button>
+        <button
+          type="button"
+          onClick={props.onOpenProject}
+          className="mt-2 flex w-full items-center gap-2 rounded-md border border-zinc-300 px-3 py-1.5 text-sm hover:bg-zinc-100 dark:border-zinc-700 dark:hover:bg-zinc-800"
+        >
+          <FolderOpen size={16} /> Projekt öffnen (Coding)
         </button>
       </div>
       <ul className="flex-1 overflow-y-auto px-2 pb-2 text-sm">

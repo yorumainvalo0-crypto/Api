@@ -29,6 +29,13 @@ const MIGRATIONS: string[] = [
   CREATE INDEX messages_chat_idx ON messages(chat_id, created_at);
   CREATE INDEX chats_updated_idx ON chats(updated_at DESC);
   `,
+  // v2: coding mode (project folder + permission mode) and ordered message parts.
+  `
+  ALTER TABLE chats ADD COLUMN mode TEXT NOT NULL DEFAULT 'chat';
+  ALTER TABLE chats ADD COLUMN project_path TEXT;
+  ALTER TABLE chats ADD COLUMN permission_mode TEXT NOT NULL DEFAULT 'default';
+  ALTER TABLE messages ADD COLUMN parts_json TEXT NOT NULL DEFAULT '[]';
+  `,
 ]
 
 export function openDatabase(path: string): DatabaseSync {

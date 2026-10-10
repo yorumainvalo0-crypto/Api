@@ -9,10 +9,33 @@ type ContentBlock =
   | { type: 'tool_use'; id: string; name: string; input: unknown }
   | { type: string }
 
+type UserContentBlock =
+  | {
+      type: 'tool_result'
+      tool_use_id: string
+      content?: string | { type: string; text?: string }[]
+      is_error?: boolean
+    }
+  | { type: string }
+
+/** Flattens tool result content (string or blocks) into display text. */
+export function toolResultText(
+  content: string | { type: string; text?: string }[] | undefined,
+): string {
+  if (content === undefined) return ''
+  if (typeof content === 'string') return content
+  return content.map((b) => (b.type === 'text' ? (b.text ?? '') : `[${b.type}]`)).join('\n')
+}
+
 export type SdkMessageLike =
   | { type: 'system'; subtype: 'init'; model: string; tools: string[]; session_id: string }
   | { type: 'system'; subtype: string; session_id?: string }
   | { type: 'assistant'; message: { content: ContentBlock[] }; parent_tool_use_id: string | null }
+  | {
+      type: 'user'
+      message: { content: string | UserContentBlock[] }
+      parent_tool_use_id: string | null
+    }
   | {
       type: 'stream_event'
       event: { type: string; delta?: { type: string; text?: string } }
@@ -59,6 +82,24 @@ export function normalizeSdkMessage(chatId: string, msg: SdkMessageLike): AgentE
             toolUseId: block.id,
             name: block.name,
             input: block.input,
+          })
+        }
+      }
+      return events
+    }
+    case 'user': {
+      if (!('message' in msg) || msg.parent_tool_use_id !== null) return []
+      const { content } = msg.message
+      if (typeof content === 'string') return []
+      const events: AgentEvent[] = []
+      for (const block of content) {
+        if (block.type === 'tool_result' && 'tool_use_id' in block) {
+          events.push({
+            chatId,
+            type: 'tool-result',
+            toolUseId: block.tool_use_id,
+            content: toolResultText(block.content),
+            isError: block.is_error === true,
           })
         }
       }

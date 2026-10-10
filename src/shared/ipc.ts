@@ -5,8 +5,9 @@ import {
   SettingsPatchSchema,
   SettingsSchema,
 } from './schemas/settings'
-import { AgentEventSchema, ChatRequestSchema } from './schemas/agent'
+import { AgentEventSchema, ChatRequestSchema, PermissionDecisionSchema } from './schemas/agent'
 import {
+  AgentPermissionModeSchema,
   AttachmentInputSchema,
   AttachmentSchema,
   ChatDetailSchema,
@@ -54,13 +55,30 @@ export const ipcContract = {
     output: z.object({ ok: z.boolean() }),
   },
   'chats:delete': { input: ChatIdInput, output: z.object({ ok: z.boolean() }) },
+  'chats:create-project': {
+    input: z.object({ chatId: z.string().min(1).optional(), projectPath: z.string().min(1) }),
+    output: ChatSummarySchema,
+  },
+  'chats:set-permission-mode': {
+    input: ChatIdInput.extend({ mode: AgentPermissionModeSchema }),
+    output: z.object({ ok: z.boolean() }),
+  },
   'attachments:add': {
     input: ChatIdInput.extend({ files: z.array(AttachmentInputSchema).min(1).max(20) }),
     output: z.object({ attachments: z.array(AttachmentSchema), errors: z.array(z.string()) }),
   },
   'dialog:open-files': { input: z.void(), output: z.array(z.string()) },
+  'dialog:open-folder': { input: z.void(), output: z.string().nullable() },
   'agent:send': { input: ChatRequestSchema, output: z.object({ accepted: z.boolean() }) },
   'agent:cancel': { input: ChatIdInput, output: z.object({ ok: z.boolean() }) },
+  'agent:permission-respond': {
+    input: z.object({
+      requestId: z.string().min(1),
+      decision: PermissionDecisionSchema,
+      message: z.string().max(2000).optional(),
+    }),
+    output: z.object({ ok: z.boolean() }),
+  },
   ...projectContract,
 } as const
 
