@@ -72,6 +72,8 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
   - Sind andere Ports erreichbar (8000/8188), bietet die App die Adresse an.
 - **Getestet:** gesamt 301 Tests, darunter echte Agent-Durchläufe für Cowork (Jev-Routing +
   Subagent) und Terminal (Claude Code im echten Terminal). Smoke-Test OK.
+- **Windows-CI grün:** In der installierten Windows-App startet PowerShell 7 im Terminal, und
+  der Terminal-Test ist bestanden. Danach nach `main` gepusht.
 
 ### 2026-10-10 18:19 – v0.2.3: Lesbare Auswahllisten, Claude kennt die App ✅
 
