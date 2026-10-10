@@ -28,3 +28,7 @@ nsis:
   createDesktopShortcut: true
   shortcutName: AI Workbench
 npmRebuild: true
+publish:
+  provider: github
+  owner: yorumainvalo0-crypto
+  repo: Api

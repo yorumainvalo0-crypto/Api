@@ -7,6 +7,7 @@ import {
   type Settings,
 } from '@shared/schemas/settings'
 import type { ModelInfo } from '@shared/schemas/models'
+import type { IpcOutput } from '@shared/ipc'
 import { api } from '../../lib/api'
 import { ModelPicker, cleanError } from '../../components/ModelPicker'
 
@@ -99,6 +100,27 @@ export function SettingsView(props: { settings: Settings; onChange: (s: Settings
             filter={imageCapable}
           />
         </section>
+
+        <section className="space-y-2">
+          <h2 className="font-medium">Kostenlimit</h2>
+          <label className="flex items-center gap-2 text-sm">
+            Maximal
+            <input
+              type="number"
+              min={0}
+              step={0.1}
+              defaultValue={settings.maxBudgetUsd}
+              onBlur={(e) => {
+                const value = Number(e.target.value)
+                if (Number.isFinite(value) && value >= 0) void update({ maxBudgetUsd: value })
+              }}
+              className="w-24 rounded-md border border-zinc-300 bg-transparent px-2 py-1 dark:border-zinc-700"
+            />
+            US-Dollar pro Anfrage (0 = kein Limit)
+          </label>
+        </section>
+
+        <UpdatesSection />
 
         <section className="space-y-2">
           <h2 className="font-medium">Daten</h2>
@@ -272,5 +294,49 @@ function BackupButton() {
       </button>
       {message && <span className="text-xs text-zinc-500">{message}</span>}
     </div>
+  )
+}
+
+function UpdatesSection() {
+  const [status, setStatus] = useState<IpcOutput<'updates:check'> | null>(null)
+  const [checking, setChecking] = useState(false)
+  const check = async () => {
+    setChecking(true)
+    try {
+      setStatus(await api.invoke('updates:check'))
+    } catch (e) {
+      setStatus({ state: 'error', message: cleanError(e) })
+    } finally {
+      setChecking(false)
+    }
+  }
+  return (
+    <section className="space-y-2">
+      <h2 className="font-medium">Updates</h2>
+      <div className="flex flex-wrap items-center gap-3 text-sm">
+        <button
+          type="button"
+          disabled={checking}
+          onClick={() => void check()}
+          className="rounded-md border border-zinc-300 px-3 py-1 disabled:opacity-50 dark:border-zinc-700"
+        >
+          {checking ? 'Prüfe …' : 'Nach Updates suchen'}
+        </button>
+        {status?.state === 'downloaded' && (
+          <button
+            type="button"
+            onClick={() => void api.invoke('updates:install')}
+            className="rounded-md bg-blue-600 px-3 py-1 text-white"
+          >
+            Jetzt neu starten und installieren
+          </button>
+        )}
+        {status && (
+          <span className={status.state === 'error' ? 'text-red-600' : 'text-zinc-500'}>
+            {status.message}
+          </span>
+        )}
+      </div>
+    </section>
   )
 }

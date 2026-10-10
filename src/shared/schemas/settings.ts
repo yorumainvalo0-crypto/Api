@@ -25,6 +25,8 @@ export const SettingsSchema = z.object({
   webAccess: z.boolean().default(true),
   /** OpenRouter model used by the generate_image tool. */
   imageModel: z.string().default('google/gemini-3.1-flash-lite-image'),
+  /** Stops a single request once it costs more than this (USD); 0 = no limit. */
+  maxBudgetUsd: z.number().min(0).max(1000).default(0),
 })
 export type Settings = z.infer<typeof SettingsSchema>
 
@@ -45,6 +47,7 @@ export const SettingsPatchSchema = z
     theme: z.enum(['system', 'light', 'dark']),
     webAccess: z.boolean(),
     imageModel: z.string(),
+    maxBudgetUsd: z.number().min(0).max(1000),
   })
   .partial()
 export type SettingsPatch = z.infer<typeof SettingsPatchSchema>

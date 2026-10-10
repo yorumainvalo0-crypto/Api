@@ -220,6 +220,7 @@ export class SessionManager {
         },
         plugins: addons.plugins,
         allowedTools: autoAllowed,
+        ...(settings.maxBudgetUsd > 0 ? { maxBudgetUsd: settings.maxBudgetUsd } : {}),
         // Tools from user-installed MCP servers and plugins ask for approval.
         canUseTool: this.permissions.canUseTool(chatId),
         // Our own free web tools replace the built-in ones (which need Anthropic-hosted services).

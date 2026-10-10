@@ -35,6 +35,14 @@ export const ipcContract = {
     }),
   },
   'settings:get': { input: z.void(), output: SettingsSchema },
+  'updates:check': {
+    input: z.void(),
+    output: z.object({
+      state: z.enum(['disabled', 'checking', 'available', 'not-available', 'downloaded', 'error']),
+      message: z.string(),
+    }),
+  },
+  'updates:install': { input: z.void(), output: z.object({ ok: z.boolean() }) },
   'settings:update': { input: SettingsPatchSchema, output: SettingsSchema },
   'secrets:status': { input: z.void(), output: SecretStatusSchema },
   'secrets:set': {

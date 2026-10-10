@@ -107,7 +107,10 @@ export function normalizeSdkMessage(chatId: string, msg: SdkMessageLike): AgentE
     }
     case 'result': {
       if (!('is_error' in msg)) return []
-      const text = msg.result ?? msg.errors?.join('\n') ?? ''
+      const text =
+        msg.subtype === 'error_max_budget_usd'
+          ? 'Kostenlimit für diese Anfrage erreicht (Einstellungen → Kostenlimit).'
+          : (msg.result ?? msg.errors?.join('\n') ?? '')
       return [
         {
           chatId,

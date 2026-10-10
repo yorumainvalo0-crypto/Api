@@ -21,6 +21,7 @@ import { SettingsStore } from './storage/settings-store'
 import { storeAttachment } from './workspace/attachments'
 import { handleFileProtocol, registerFileProtocolScheme } from './workspace/file-protocol'
 import { runSmokeTest } from './smoke'
+import { checkForUpdates, initUpdater, installUpdateNow } from './updater'
 import { createChromiumLoader, createSmartLoader } from './web/electron-loader'
 import { createWebMcpServer } from './web/mcp-server'
 import { createFetchLoader, WebClient } from './web/web-client'
@@ -142,6 +143,11 @@ function bootstrap(): void {
       dataDir,
     }),
     'settings:get': () => settings.get(),
+    'updates:check': () => checkForUpdates(),
+    'updates:install': () => {
+      installUpdateNow()
+      return { ok: true }
+    },
     'settings:update': (patch) => settings.update(patch),
     'secrets:status': () => secrets.status(),
     'secrets:set': ({ provider, value }) => {
@@ -275,6 +281,7 @@ function bootstrap(): void {
 
   mainWindow = createWindow()
   if (isSmokeTest) runSmokeTest(mainWindow)
+  else initUpdater()
 }
 
 void app.whenReady().then(() => {

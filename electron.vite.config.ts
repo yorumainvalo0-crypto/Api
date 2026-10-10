@@ -23,5 +23,6 @@ export default defineConfig({
       alias: { ...shared, '@renderer': resolve('src/renderer/src') },
     },
     plugins: [react(), tailwindcss()],
+    build: { minify: true },
   },
 })

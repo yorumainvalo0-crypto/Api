@@ -1,4 +1,5 @@
-import hljs from 'highlight.js'
+// Common languages only (~40) keeps the bundle small; the full set adds ~1 MB.
+import hljs from 'highlight.js/lib/common'
 
 /** Files larger than this are shown without syntax highlighting. */
 const HIGHLIGHT_LIMIT = 300 * 1024
