@@ -19,6 +19,8 @@ import { extractDocument } from '../documents/extract'
 import type { UsageRepository } from '../storage/usage-repository'
 import { contextFromResult, parseContextResponse } from './context'
 import { describeAppCapabilities } from './app-context'
+import { OPEN_CODING_SYSTEM_PROMPT } from './prompts/open-coding-prompt'
+import { isClaudeModel } from './prompts/select'
 import { applyRole, routeRequest } from '../cowork/router'
 import { coworkBrief, SUBAGENT_NOTE } from '../cowork/brief'
 import {
@@ -544,18 +546,25 @@ export class SessionManager {
         }
       }
       // Options shared by the main agent and subagents for the chat/coding mode.
-      const modeOptions = (systemNote: string): Partial<Options> =>
+      const modeOptions = (
+        systemNote: string,
+        agentProvider: ProviderId,
+        agentModel: string,
+      ): Partial<Options> =>
         isCode
           ? {
               tools: { type: 'preset', preset: 'claude_code' },
               // user = installed skills (isolated config dir); project = CLAUDE.md, .claude/settings.json.
               settingSources: ['user', 'project'],
               skills: 'all',
-              systemPrompt: {
-                type: 'preset',
-                preset: 'claude_code',
-                append: `${CODE_SYSTEM_APPEND}\n\n${systemNote}`,
-              },
+              // Claude keeps the Claude Code prompt; other models get the open-source Codex prompt.
+              systemPrompt: isClaudeModel(agentProvider, agentModel)
+                ? {
+                    type: 'preset',
+                    preset: 'claude_code',
+                    append: `${CODE_SYSTEM_APPEND}\n\n${systemNote}`,
+                  }
+                : `${OPEN_CODING_SYSTEM_PROMPT}\n\n${systemNote}`,
               permissionMode: chat.permissionMode,
               ...(chat.permissionMode === 'bypassPermissions'
                 ? { allowDangerouslySkipPermissions: true }
@@ -597,7 +606,11 @@ export class SessionManager {
                     ...effortOption(subSettings, role.provider),
                     canUseTool: this.permissions.canUseTool(chatId),
                     disallowedTools: ['WebSearch', 'WebFetch'],
-                    ...modeOptions(`${SUBAGENT_NOTE}\n\n${capabilities(isCode ? 'code' : 'chat')}`),
+                    ...modeOptions(
+                      `${SUBAGENT_NOTE}\n\n${capabilities(isCode ? 'code' : 'chat')}`,
+                      role.provider,
+                      role.model,
+                    ),
                   }),
                 })
                 extraCostUsd += result.costUsd
@@ -636,7 +649,10 @@ export class SessionManager {
         // Our own free web tools replace the built-in ones (which need Anthropic-hosted services).
         disallowedTools: ['WebSearch', 'WebFetch'],
       }
-      const options: Options = { ...common, ...modeOptions(mainNote) }
+      const options: Options = {
+        ...common,
+        ...modeOptions(mainNote, provider, settings.models[provider]),
+      }
 
       const documents = await extractAttachedDocuments(attachments)
       const blocks = buildPromptBlocks(

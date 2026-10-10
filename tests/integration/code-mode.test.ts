@@ -34,13 +34,15 @@ describe('coding agent (real runtime, scripted model)', () => {
   /** How the test "user" answers permission prompts. */
   let decision: PermissionDecision = 'allow'
   const events: AgentEvent[] = []
+  const systemPrompts: string[] = []
 
   beforeAll(async () => {
-    mock = await startMockAnthropic((body) =>
-      hasToolResult(body) || !nextTool
+    mock = await startMockAnthropic((body) => {
+      systemPrompts.push(JSON.stringify((body as { system?: unknown }).system ?? ''))
+      return hasToolResult(body) || !nextTool
         ? { text: 'Fertig.' }
-        : { text: 'Ich lege die Datei an.', toolUse: nextTool },
-    )
+        : { text: 'Ich lege die Datei an.', toolUse: nextTool }
+    })
     dir = mkdtempSync(join(tmpdir(), 'aiw-code-'))
     db = openDatabase(join(dir, 'w.db'))
     chats = new ChatRepository(db)
@@ -102,6 +104,12 @@ describe('coding agent (real runtime, scripted model)', () => {
     const ofChat = events.filter((e) => e.chatId === chat.id)
     return { project, chatId: chat.id, events: ofChat }
   }
+
+  it('gives non-Claude models the open-source coding prompt', async () => {
+    await run('prompt', 'default', undefined)
+    expect(systemPrompts.some((p) => p.includes('You are a coding agent'))).toBe(true)
+    expect(systemPrompts.some((p) => p.includes('Was die AI Workbench kann'))).toBe(true)
+  }, 120_000)
 
   it('asks for permission, writes the file after approval and persists the tool call', async () => {
     decision = 'allow'
