@@ -3,7 +3,7 @@
 Laufendes Protokoll zur Umsetzung von [`PLAN.md`](./PLAN.md).
 Zeiten in UTC. Legende: ✅ fertig · 🔄 in Arbeit · ⏳ offen · ⚠️ Problem/Hinweis
 
-**Letztes Update:** 2026-10-10 11:05
+**Letztes Update:** 2026-10-10 11:07
 
 ## Gesamtstatus
 
@@ -33,6 +33,19 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
 | Windows-CI: Tests, Installer, Smoke-Test der installierten App               | ✅       |
 
 ## Protokoll
+
+### 2026-10-10 11:07 – Veröffentlicht auf `main` ✅
+
+- **Windows-CI grün** für den Stand mit PDF-Vorschau und ComfyUI (Tests, Installer,
+  Smoke-Test der installierten App).
+- ⚠️ **Zwei Windows-Testprobleme behoben:**
+  - Der erste PowerShell-Start ist auf dem CI-Rechner langsam; der Test bekommt jetzt mehr
+    Zeit, und das Aufräumen wartet, bis der Ordner frei ist.
+  - Der ComfyUI-Test hat Windows-Pfade mit `\` falsch ausgelesen.
+  - In der App selbst lag kein Fehler.
+- **Branch `main`** auf GitHub neu angelegt; er steht auf genau dem getesteten Stand.
+  Entwickelt wird weiterhin auf `claude/ecstatic-bohr-ze5jpk`.
+- **Tipp:** Unter GitHub → Settings → General → „Default branch“ auf `main` umstellen.
 
 ### 2026-10-10 11:05 – Erweiterungen: PDF-Vorschau und lokale Bild-/3D-Erzeugung ✅
 
