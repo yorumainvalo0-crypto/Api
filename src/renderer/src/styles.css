@@ -1,0 +1,42 @@
+@import 'tailwindcss';
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+:root {
+  color-scheme: light dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  @apply bg-white text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100;
+  font-family:
+    'Segoe UI Variable',
+    'Segoe UI',
+    system-ui,
+    -apple-system,
+    sans-serif;
+}
+
+.prose-chat pre {
+  @apply my-2 overflow-x-auto rounded-md bg-zinc-100 p-3 text-sm dark:bg-zinc-900;
+}
+.prose-chat code {
+  @apply font-mono text-[0.9em];
+}
+.prose-chat p {
+  @apply my-1.5 leading-relaxed;
+}
+.prose-chat ul {
+  @apply my-1.5 list-disc pl-5;
+}
+.prose-chat ol {
+  @apply my-1.5 list-decimal pl-5;
+}
+.prose-chat a {
+  @apply text-blue-600 underline dark:text-blue-400;
+}

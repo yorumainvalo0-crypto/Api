@@ -1,0 +1,30 @@
+appId: de.code2be.aiworkbench
+productName: AI Workbench
+directories:
+  buildResources: build
+  output: release/${version}
+files:
+  - out/**
+  - package.json
+  - '!**/.vscode/*'
+  - '!src/*'
+  - '!docs/*'
+  - '!tests/*'
+  - '!scripts/*'
+  # Only ship the runtime for the target platform (musl builds are Alpine-only).
+  - '!node_modules/@anthropic-ai/claude-agent-sdk-*-musl/**'
+asarUnpack:
+  # The Claude Code native runtime must live outside the asar archive to be executable.
+  - node_modules/@anthropic-ai/claude-agent-sdk-*/**
+win:
+  target:
+    - target: nsis
+      arch: [x64]
+  executableName: ai-workbench
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  shortcutName: AI Workbench
+npmRebuild: true
