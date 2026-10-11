@@ -251,6 +251,19 @@ export class TerminalService {
     this.collector?.flushAll()
   }
 
+  /**
+   * Kills all shells and waits until they have exited (at most `timeoutMs`). On Windows, quitting
+   * while a ConPTY shell is still shutting down can crash the process (0xC0000409).
+   */
+  async shutdown(timeoutMs = 3000): Promise<void> {
+    this.killAll()
+    const deadline = Date.now() + timeoutMs
+    while (this.sessions.size > 0 && Date.now() < deadline) {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    }
+    await this.dispose()
+  }
+
   async dispose(): Promise<void> {
     this.killAll()
     this.flushUsage()

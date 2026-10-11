@@ -41,7 +41,14 @@ export function createTerminalHandlers(deps: TerminalHandlerDeps): TerminalHandl
     })
     target.on('render-process-gone', () => service.killAll())
   }
-  app.on('will-quit', () => void service.dispose())
+  // Quit only after the shells are gone: a ConPTY shell that is still closing can crash the app.
+  let closed = false
+  app.on('before-quit', (event) => {
+    if (closed) return
+    event.preventDefault()
+    closed = true
+    void service.shutdown().finally(() => app.quit())
+  })
 
   return {
     'terminal:create': (input) => {

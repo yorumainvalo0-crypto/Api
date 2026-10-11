@@ -231,7 +231,15 @@ async function checkTerminal(win: BrowserWindow, cwd: string): Promise<void> {
       return { shell: created.shell, ok: true }
     } finally {
       off()
+      // Wait until the shell has really exited; quitting earlier can crash ConPTY on Windows.
+      const exited = new Promise((resolve) => {
+        const stop = window.api.on('terminal:exit', (e) => {
+          if (e.sessionId === sessionId) { stop(); resolve(true) }
+        })
+        setTimeout(() => resolve(false), 8000)
+      })
       await window.api.invoke('terminal:kill', { sessionId })
+      await exited
     }
   })()`)) as { shell: string; ok: boolean }
   console.log(`[smoke] terminal ${JSON.stringify(result)}`)
