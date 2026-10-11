@@ -3,7 +3,7 @@
 Laufendes Protokoll zur Umsetzung von [`PLAN.md`](./PLAN.md).
 Zeiten in UTC. Legende: ✅ fertig · 🔄 in Arbeit · ⏳ offen · ⚠️ Problem/Hinweis
 
-**Letztes Update:** 2026-10-10 19:56
+**Letztes Update:** 2026-10-11 12:14
 
 ## Gesamtstatus
 
@@ -26,7 +26,7 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
 | Prüfung                                                                      | Ergebnis |
 | ---------------------------------------------------------------------------- | -------- |
 | TypeScript strict + ESLint                                                   | ✅       |
-| Unit- und Integrationstests (42 Dateien)                                     | ✅ 301   |
+| Unit- und Integrationstests (46 Dateien)                                     | ✅ 342   |
 | Integration mit echtem Runtime (Chat, Coding, Web, Medien, Add-ons, ComfyUI) | ✅       |
 | Integration: Handschrift-OCR (Ollama) und Office lesen/erstellen             | ✅       |
 | Live-Test echte Websuche (optional, `AIW_LIVE_WEB=1`)                        | ✅       |
@@ -34,6 +34,33 @@ Befehl: `npm run check` (Typecheck → Lint → Tests → Build → Smoke-Test)
 | Windows-CI: Tests, Installer, Smoke-Test der installierten App               | ✅       |
 
 ## Protokoll
+
+### 2026-10-11 12:14 – v0.3.1: Auto-Modus und Arbeitsordner für Claude Code ✅
+
+Umgesetzt per Opus-Subagent, von mir geprüft.
+
+- **Auto-Modus „Automatisch (KI prüft)“:** neuer Freigabe-Modus im Coding-Chat und
+  Standard-Modus für Claude Code im Terminal (Einstellungen → „Claude Code: Berechtigungen &
+  Arbeitsordner“).
+  - Änderungen im Arbeitsordner sind direkt erlaubt. Alles andere bewertet ein separates
+    Prüfmodell. Kommt keine Antwort, wird die Aktion blockiert.
+  - Funktioniert mit Anthropic, mit OpenRouter ungetestet. Bei Ollama nimmt die App
+    stattdessen „Dateiänderungen erlauben“ und zeigt das an.
+- **Nur im gewählten Arbeitsordner** (Standard: an):
+  - Claudes Datei-Werkzeuge (Lesen, Schreiben, Suchen) sind hart auf den Arbeitsordner begrenzt.
+    Das gilt im Coding-Chat, für Cowork-Subagents und im Terminal. Jeder Pfad wird vorher
+    vollständig aufgelöst.
+  - Geschützte Dateien wie `.claude/settings*.json`, `.mcp.json` und Git-Hooks nur nach
+    Bestätigung, im Modus „Alles erlauben“ gesperrt.
+- **Sandbox für Befehle:** Unter Linux/macOS dürfen Befehle nur im Arbeitsordner schreiben;
+  Home-Ordner und API-Keys sind für sie unsichtbar.
+  - ⚠️ **Unter Windows ist die Sandbox der Claude-Laufzeit in dieser Version nicht verfügbar.**
+    Datei-Werkzeuge bleiben begrenzt, PowerShell-Befehle aber nicht. Die App zeigt das
+    deutlich an.
+- **Getestet:** 342 Tests, darunter echte Durchläufe im Chat und im Terminal:
+  - Lesen und Schreiben außerhalb des Ordners wird abgelehnt, auch im Modus „Alles erlauben“.
+  - Innerhalb des Ordners funktioniert es, Tests per Befehl laufen.
+  - Mit Sandbox ist der Home-Ordner für Befehle unsichtbar.
 
 ### 2026-10-10 19:56 – v0.3.0: Terminal mit Claude Code, Cowork-Modus, Coding-Prompt, ComfyUI ✅
 
