@@ -24,6 +24,7 @@ import {
 } from '@shared/schemas/settings'
 import {
   AgentPermissionModeSchema,
+  PERMISSION_MODE_HINTS,
   PERMISSION_MODE_LABELS,
   type AgentPermissionMode,
   type Attachment,
@@ -290,18 +291,27 @@ export function ChatView(props: {
               </span>
               <select
                 value={chat.permissionMode}
-                title="Freigaben für den Agenten"
+                title={`Freigaben für den Agenten: ${PERMISSION_MODE_HINTS[chat.permissionMode]}`}
+                aria-label="Freigaben für den Agenten"
                 onChange={(e) =>
                   void setPermissionMode(AgentPermissionModeSchema.parse(e.target.value))
                 }
                 className="rounded-md border border-zinc-300 bg-transparent px-2 py-1 text-sm dark:border-zinc-700"
               >
                 {AgentPermissionModeSchema.options.map((mode) => (
-                  <option key={mode} value={mode}>
+                  <option key={mode} value={mode} title={PERMISSION_MODE_HINTS[mode]}>
                     {PERMISSION_MODE_LABELS[mode]}
                   </option>
                 ))}
               </select>
+              {chat.permissionMode === 'auto' && provider === 'ollama' && !cowork ? (
+                <span
+                  className="text-xs text-amber-600 dark:text-amber-400"
+                  title="„Automatisch (KI prüft)“ braucht ein Claude-Prüfmodell über Anthropic oder OpenRouter."
+                >
+                  Mit Ollama: „{PERMISSION_MODE_LABELS.acceptEdits}“
+                </span>
+              ) : null}
             </>
           )}
           <span className="ml-auto" />

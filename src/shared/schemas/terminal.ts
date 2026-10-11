@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { AgentPermissionModeSchema } from './permissions'
 
 /** Chosen by the renderer, so output that arrives before terminal:create returns is not lost. */
 export const TerminalSessionIdSchema = z.uuid()
@@ -22,6 +23,18 @@ export const TerminalCreatedSchema = z.object({
   shell: z.string(),
   /** Why `claude` cannot use the app's credentials (missing key, no model), otherwise null. */
   notice: z.string().nullable(),
+  /** How `claude` starts in this session. */
+  claude: z.object({
+    /** Permission mode passed to `claude` (after fallbacks). */
+    permissionMode: AgentPermissionModeSchema,
+    /** Why the mode from the settings is replaced, otherwise null. */
+    modeNote: z.string().nullable(),
+    /** Folder file access is confined to; null when the confinement is switched off. */
+    workFolder: z.string().nullable(),
+    /** Shell commands run in the OS sandbox (only with a work folder). */
+    sandbox: z.boolean(),
+    sandboxSummary: z.string(),
+  }),
 })
 export type TerminalCreated = z.infer<typeof TerminalCreatedSchema>
 

@@ -14,6 +14,7 @@ import { LocalServicesSection } from './LocalServicesSection'
 import { OcrSection } from './OcrSection'
 import { JevSection } from './JevSection'
 import { CoworkSection } from './CoworkSection'
+import { ClaudeAccessSection } from './ClaudeAccessSection'
 
 const PROVIDERS = ProviderIdSchema.options
 
@@ -82,6 +83,8 @@ export function SettingsView(props: { settings: Settings; onChange: (s: Settings
         />
 
         <CoworkSection settings={settings} secrets={secrets} onUpdate={update} />
+
+        <ClaudeAccessSection settings={settings} update={update} />
 
         <section className="space-y-2">
           <h2 className="font-medium">Internet</h2>

@@ -17,6 +17,13 @@ export interface AppCapabilities {
   skills: string[]
   plugins: number
   mcpServers: string[]
+  /**
+   * Coding mode: the folder file tools are confined to and whether shell commands run in the OS
+   * sandbox; 'off' when the user switched the confinement off; null in chat mode.
+   */
+  confinement?: { folder: string; sandbox: boolean } | 'off' | null
+  /** Why the chosen permission mode is replaced (e.g. auto mode with Ollama). */
+  permissionNote?: string | null
 }
 
 const SOURCE_LABELS: Record<JevSource, string> = {
@@ -78,10 +85,24 @@ export function describeAppCapabilities(c: AppCapabilities): string {
     c.mode === 'code'
       ? '- Coding: Dateien lesen/ändern, Befehle ausführen (mit Freigaben des Nutzers), Git.'
       : null,
+    c.confinement && c.confinement !== 'off'
+      ? `- Arbeitsordner: Du darfst Dateien NUR in ${c.confinement.folder} lesen und ändern; ` +
+        'Zugriffe außerhalb blockiert die App (Anhänge und Skills nur lesend). Versuche nicht, ' +
+        'das zu umgehen. ' +
+        (c.confinement.sandbox
+          ? 'Befehle laufen in einer Sandbox: Schreiben nur im Arbeitsordner, das Home-Verzeichnis ' +
+            'außerhalb ist gesperrt, Internetzugriffe sind eingeschränkt.'
+          : 'Befehle laufen OHNE Sandbox – bleib auch mit Befehlen im Arbeitsordner.')
+      : null,
+    c.confinement === 'off'
+      ? '- Arbeitsordner-Beschränkung ist in den Einstellungen ausgeschaltet.'
+      : null,
+    c.permissionNote ? `- Freigabe-Modus: ${c.permissionNote}` : null,
     '',
     '### Weitere App-Funktionen (zum Erklären, keine Werkzeuge)',
     '- Coding: „Projekt öffnen (Coding)“ startet einen Agenten mit Dateizugriff, Terminal, Git und Freigabe-Modi.',
-    '- Terminal (Symbol links): echte PowerShell; der Befehl `claude` startet Claude Code mit den Keys, dem Modell und dem Effort der App, der Verbrauch landet in der Statistik.',
+    '- Terminal (Symbol links): echte PowerShell; der Befehl `claude` startet Claude Code mit den Keys, dem Modell und dem Effort der App, der Verbrauch landet in der Statistik. Mit „Ordner wählen …“ wird der Ordner zum Arbeitsordner: Claude Code darf dann nur dort lesen/schreiben, im Freigabe-Modus aus den Einstellungen.',
+    '- Einstellungen → „Claude Code: Berechtigungen & Arbeitsordner“: Freigabe-Modus (auch „Automatisch (KI prüft)“), Beschränkung auf den Arbeitsordner und Sandbox-Status.',
     '- Cowork (Schalter oben im Chat): Jev verteilt Anfragen auf Rollen mit eigenem Modell und Effort, Subagents übernehmen Teilaufgaben; Rollen unter Einstellungen → Cowork.',
     '- Modell- und Effort-Auswahl oben im Chat; Kontext-Anzeige zeigt, wie voll das Kontextfenster ist.',
     '- „Verbrauch“ (Diagramm-Symbol links): Tokens, Cache und Kosten je Anbieter/Modell, Verlauf pro Stunde/Tag.',

@@ -1,6 +1,7 @@
-import { statSync } from 'node:fs'
+import { realpathSync, statSync } from 'node:fs'
 import { homedir } from 'node:os'
-import { join, resolve } from 'node:path'
+import { delimiter, join, resolve } from 'node:path'
+import type { SandboxStatus } from '@shared/schemas/permissions'
 import type { ProviderId, Settings } from '@shared/schemas/settings'
 import type {
   TerminalCreated,
@@ -8,7 +9,15 @@ import type {
   TerminalExitEvent,
 } from '@shared/schemas/terminal'
 import type { UsageRepository } from '../storage/usage-repository'
+import { buildSandboxSettings, effectivePermissionMode, sandboxStatus } from '../agent/sandbox'
+import {
+  buildTerminalClaudeSettings,
+  removeSessionSettings,
+  sessionSettingsDir,
+  writeSessionSettings,
+} from './claude-settings'
 import { buildTerminalEnv } from './env'
+import { PathGuardServer } from './guard-server'
 import { PtySession, type PtyModule } from './pty'
 import { defaultShell, terminalBinDir, type ShellSpec } from './shell'
 import { OtlpLogsReceiver, TerminalUsageCollector } from './usage'
@@ -32,6 +41,8 @@ export interface TerminalServiceDeps {
   /** Changes the environment of new sessions (tests). */
   adjustEnv?: (env: Record<string, string>) => void
   usageIdleMs?: number
+  /** Overrides the OS sandbox detection (tests). */
+  sandboxStatus?: () => SandboxStatus
 }
 
 export interface CreateTerminalInput {
@@ -68,6 +79,7 @@ export class TerminalService {
   private readonly providers = new Map<string, ProviderId>()
   private readonly collector: TerminalUsageCollector | undefined
   private readonly receiver: OtlpLogsReceiver | undefined
+  private readonly guard = new PathGuardServer()
 
   constructor(private readonly deps: TerminalServiceDeps) {
     if (deps.usage) {
@@ -97,6 +109,7 @@ export class TerminalService {
     installClaudeWrapper(binDir, this.deps.claudeExecutable)
     const usage = this.receiver ? await this.receiver.start() : undefined
     const settings = this.deps.getSettings()
+    const claude = await this.prepareClaude(sessionId, cwd, settings)
     const { env, provider, notice } = buildTerminalEnv({
       settings,
       secret: this.deps.getSecret(settings.activeProvider),
@@ -107,6 +120,7 @@ export class TerminalService {
       claudeExecutable: this.deps.claudeExecutable,
       sessionId,
       ...(usage ? { usage } : {}),
+      claude: { permissionMode: claude.info.permissionMode, settingsFile: claude.settingsFile },
     })
     this.deps.adjustEnv?.(env)
     const shell = this.deps.shell ?? defaultShell(process.platform, env)
@@ -119,6 +133,7 @@ export class TerminalService {
           onData: (data) => this.deps.emitData({ sessionId, data }),
           onExit: (exitCode, signal) => {
             this.sessions.delete(sessionId)
+            this.releaseClaude(sessionId)
             this.deps.emitExit({ sessionId, exitCode, signal })
             setTimeout(() => this.collector?.flushTerminal(sessionId), EXIT_FLUSH_DELAY_MS).unref()
           },
@@ -126,6 +141,7 @@ export class TerminalService {
         this.deps.ptyModule,
       )
     } catch (error) {
+      this.releaseClaude(sessionId)
       const reason = error instanceof Error ? error.message : String(error)
       throw new Error(`Shell konnte nicht gestartet werden (${shell.file}): ${reason}`, {
         cause: error,
@@ -133,7 +149,71 @@ export class TerminalService {
     }
     this.providers.set(sessionId, provider)
     if (session.running) this.sessions.set(sessionId, session)
-    return { sessionId, cwd, shell: shell.file, notice }
+    return { sessionId, cwd, shell: shell.file, notice, claude: claude.info }
+  }
+
+  /**
+   * Permission mode and work folder confinement of `claude` in a new session: registers the
+   * folder with the path guard and writes the session's settings file (see ./claude-settings.ts).
+   */
+  private async prepareClaude(
+    sessionId: string,
+    cwd: string,
+    settings: Settings,
+  ): Promise<{ info: TerminalCreated['claude']; settingsFile?: string }> {
+    const { mode, note } = effectivePermissionMode(
+      settings.claudePermissionMode,
+      settings.activeProvider,
+    )
+    const status = (this.deps.sandboxStatus ?? sandboxStatus)()
+    if (!settings.confineToWorkFolder) {
+      return {
+        info: {
+          permissionMode: mode,
+          modeNote: note,
+          workFolder: null,
+          sandbox: false,
+          sandboxSummary: status.summary,
+        },
+      }
+    }
+    // Canonical path, so the sandbox binds the real folder (not a symlink to it).
+    const workFolder = realpathSync.native(cwd)
+    const readOnly = [join(this.configDir, 'skills')]
+    const guard = await this.guard.start()
+    this.guard.register(sessionId, { readWrite: [workFolder], readOnly })
+    const sandbox = status.active
+      ? buildSandboxSettings({
+          workFolder,
+          readRoots: readOnly,
+          pathDirs: (process.env['PATH'] ?? '').split(delimiter),
+          hidden: [this.deps.dataDir],
+        })
+      : undefined
+    const settingsFile = writeSessionSettings(
+      sessionSettingsDir(this.deps.dataDir),
+      sessionId,
+      buildTerminalClaudeSettings({
+        guardUrl: `${guard.url}/${sessionId}`,
+        guardToken: guard.token,
+        sandbox,
+      }),
+    )
+    return {
+      info: {
+        permissionMode: mode,
+        modeNote: note,
+        workFolder,
+        sandbox: sandbox !== undefined,
+        sandboxSummary: status.summary,
+      },
+      settingsFile,
+    }
+  }
+
+  private releaseClaude(sessionId: string): void {
+    this.guard.unregister(sessionId)
+    removeSessionSettings(sessionSettingsDir(this.deps.dataDir), sessionId)
   }
 
   write(sessionId: string, data: string, binary = false): boolean {
@@ -175,5 +255,6 @@ export class TerminalService {
     this.killAll()
     this.flushUsage()
     await this.receiver?.close()
+    await this.guard.close()
   }
 }

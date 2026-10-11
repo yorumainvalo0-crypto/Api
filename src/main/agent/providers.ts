@@ -1,6 +1,7 @@
 import type { ProviderId, Settings } from '@shared/schemas/settings'
 
 export const OPENROUTER_ANTHROPIC_BASE_URL = 'https://openrouter.ai/api'
+export const OPENROUTER_SONNET_MODEL = 'anthropic/claude-sonnet-5'
 
 export class ProviderConfigError extends Error {
   override name = 'ProviderConfigError'
@@ -66,6 +67,9 @@ export function buildProviderRuntime(args: BuildProviderRuntimeArgs): ProviderRu
       env['ANTHROPIC_AUTH_TOKEN'] = secret
       // Must be explicitly empty, otherwise the runtime prefers it over the auth token.
       env['ANTHROPIC_API_KEY'] = ''
+      // The "sonnet" model, also used by the auto-mode classifier, under its OpenRouter id
+      // (the runtime would otherwise send the Anthropic id claude-sonnet-5).
+      env['ANTHROPIC_DEFAULT_SONNET_MODEL'] = OPENROUTER_SONNET_MODEL
       return { env, model: selectedModel }
     }
     case 'ollama': {

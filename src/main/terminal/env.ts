@@ -1,3 +1,4 @@
+import type { AgentPermissionMode } from '@shared/schemas/permissions'
 import type { ProviderId, Settings } from '@shared/schemas/settings'
 import { buildProviderRuntime, isolatedRuntimeEnv, ProviderConfigError } from '../agent/providers'
 import { prependPath } from './shell'
@@ -19,6 +20,8 @@ export interface TerminalEnvArgs {
   sessionId: string
   /** Local OTLP endpoint that receives token/cost events from `claude`. */
   usage?: { endpoint: string; token: string }
+  /** How the wrapper starts `claude`: permission mode and the confinement settings file. */
+  claude?: { permissionMode: AgentPermissionMode; settingsFile?: string | undefined }
   platform?: NodeJS.Platform
 }
 
@@ -32,6 +35,8 @@ export interface TerminalEnv {
 /** Inherited variables that would misconfigure the shell or the programs started in it. */
 const DROPPED = [
   /^OTEL_/,
+  // Wrapper variables of an outer app terminal must not leak into this session.
+  /^AIW_/,
   /^TERM_PROGRAM/,
   /^ELECTRON_RUN_AS_NODE$/,
   /^ELECTRON_NO_ATTACH_CONSOLE$/,
@@ -91,6 +96,38 @@ export function buildTerminalEnv(args: TerminalEnvArgs): TerminalEnv {
     env[WRAPPER_ENV.endpoint] = usage.endpoint
     env[WRAPPER_ENV.token] = usage.token
   }
+  if (args.claude) {
+    env[WRAPPER_ENV.permissionMode] = args.claude.permissionMode
+    if (args.claude.settingsFile) env[WRAPPER_ENV.settings] = args.claude.settingsFile
+  }
   prependPath(env, binDir, platform)
+  bypassProxyForLoopback(env, platform)
   return { env, provider, notice }
+}
+
+const LOOPBACK = ['127.0.0.1', 'localhost']
+
+/**
+ * With an HTTP(S) proxy configured, makes sure loopback stays direct: `claude` sends its path
+ * guard hook and usage events to the app on 127.0.0.1, and a proxy would refuse or not reach it
+ * (tool calls would then be blocked, since the hook fails closed).
+ */
+export function bypassProxyForLoopback(
+  env: Record<string, string>,
+  platform: NodeJS.Platform = process.platform,
+): void {
+  const proxied = Object.entries(env).some(([k, v]) => /^(https?|all)_proxy$/i.test(k) && v)
+  if (!proxied) return
+  const keys =
+    platform === 'win32'
+      ? [Object.keys(env).find((k) => k.toUpperCase() === 'NO_PROXY') ?? 'NO_PROXY']
+      : ['NO_PROXY', 'no_proxy'].filter((k) => k in env)
+  for (const key of keys.length > 0 ? keys : ['NO_PROXY', 'no_proxy']) {
+    const entries = (env[key] ?? '')
+      .split(',')
+      .map((e) => e.trim())
+      .filter(Boolean)
+    const missing = LOOPBACK.filter((host) => !entries.includes(host))
+    env[key] = [...entries, ...missing].join(',')
+  }
 }

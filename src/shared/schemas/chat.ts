@@ -1,5 +1,13 @@
 import { z } from 'zod'
 import { EffortSchema, ProviderIdSchema } from './settings'
+import { AgentPermissionModeSchema } from './permissions'
+
+export {
+  AgentPermissionModeSchema,
+  PERMISSION_MODE_HINTS,
+  PERMISSION_MODE_LABELS,
+} from './permissions'
+export type { AgentPermissionMode } from './permissions'
 
 /** `document` = office files (Word, Excel, PowerPoint, OpenOffice, RTF), converted to text. */
 export const AttachmentKindSchema = z.enum(['image', 'pdf', 'text', 'model3d', 'document', 'file'])
@@ -91,22 +99,6 @@ export type ChatMessage = z.infer<typeof ChatMessageSchema>
 
 export const ChatModeSchema = z.enum(['chat', 'code'])
 export type ChatMode = z.infer<typeof ChatModeSchema>
-
-/** How the coding agent asks before using tools (maps to the SDK permission modes). */
-export const AgentPermissionModeSchema = z.enum([
-  'default',
-  'acceptEdits',
-  'plan',
-  'bypassPermissions',
-])
-export type AgentPermissionMode = z.infer<typeof AgentPermissionModeSchema>
-
-export const PERMISSION_MODE_LABELS: Record<AgentPermissionMode, string> = {
-  default: 'Immer fragen',
-  acceptEdits: 'Dateiänderungen erlauben',
-  plan: 'Nur planen',
-  bypassPermissions: 'Alles erlauben',
-}
 
 export const ChatSummarySchema = z.object({
   id: z.string(),

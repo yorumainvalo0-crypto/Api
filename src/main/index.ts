@@ -7,6 +7,7 @@ import log from 'electron-log/main'
 import pkg from '../../package.json'
 import { chatAttachmentsDir, chatWorkspace, SessionManager } from './agent/session-manager'
 import { resolveClaudeExecutable } from './agent/executable'
+import { sandboxStatus } from './agent/sandbox'
 import { registerIpcHandlers, sendEvent } from './ipc/register'
 import { listModels, testConnection } from './providers/model-catalog'
 import { createProjectHandlers } from './project/handlers'
@@ -161,6 +162,7 @@ function bootstrap(): void {
       dataDir,
     }),
     'settings:get': () => settings.get(),
+    'claude:sandbox-status': () => sandboxStatus(),
     'updates:check': () => checkForUpdates(),
     'updates:status': () => updateStatus(),
     'local:discover': () => discoverLocalServices(),

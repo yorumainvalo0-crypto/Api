@@ -61,3 +61,27 @@ describe('app capabilities in the system prompt', () => {
     expect(text).toContain('2 Plugin(s) installiert.')
   })
 })
+
+describe('work folder confinement in the system prompt', () => {
+  it('names the folder and says honestly whether commands are sandboxed', () => {
+    const sandboxed = describeAppCapabilities({
+      ...base,
+      mode: 'code',
+      confinement: { folder: 'C:\\Projekte\\App', sandbox: true },
+    })
+    expect(sandboxed).toContain('Dateien NUR in C:\\Projekte\\App lesen und ändern')
+    expect(sandboxed).toContain('Befehle laufen in einer Sandbox')
+    const unsandboxed = describeAppCapabilities({
+      ...base,
+      mode: 'code',
+      confinement: { folder: 'C:\\Projekte\\App', sandbox: false },
+      permissionNote: 'Mit Ollama gilt stattdessen „Dateiänderungen erlauben“.',
+    })
+    expect(unsandboxed).toContain('Befehle laufen OHNE Sandbox')
+    expect(unsandboxed).toContain('Freigabe-Modus: Mit Ollama')
+    expect(describeAppCapabilities({ ...base, mode: 'code', confinement: 'off' })).toContain(
+      'Arbeitsordner-Beschränkung ist in den Einstellungen ausgeschaltet',
+    )
+    expect(describeAppCapabilities(base)).not.toContain('- Arbeitsordner:')
+  })
+})

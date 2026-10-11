@@ -4,7 +4,11 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { DEFAULT_SETTINGS, type Settings } from '@shared/schemas/settings'
-import { buildTerminalEnv, type TerminalEnvArgs } from '../src/main/terminal/env'
+import {
+  buildTerminalEnv,
+  bypassProxyForLoopback,
+  type TerminalEnvArgs,
+} from '../src/main/terminal/env'
 import { defaultShell, envValue, prependPath } from '../src/main/terminal/shell'
 import {
   claudeWrapper,
@@ -177,6 +181,45 @@ describe('buildTerminalEnv', () => {
     expect(win['TERM']).toBeUndefined()
     expect(win['Path']).toBe('/data/terminal/bin;C:\\Windows')
   })
+
+  it('passes permission mode and settings file to the wrapper, never inherited ones', () => {
+    const inherited = {
+      PATH: '/usr/bin',
+      AIW_CLAUDE_SETTINGS: '/alt.json',
+      AIW_PERMISSION_MODE: 'x',
+    }
+    const plain = buildTerminalEnv(args({ baseEnv: inherited })).env
+    expect(plain['AIW_CLAUDE_SETTINGS']).toBeUndefined()
+    expect(plain['AIW_PERMISSION_MODE']).toBeUndefined()
+    const confined = buildTerminalEnv(
+      args({
+        baseEnv: inherited,
+        claude: { permissionMode: 'auto', settingsFile: '/data/terminal/sessions/abc.json' },
+      }),
+    ).env
+    expect(confined['AIW_PERMISSION_MODE']).toBe('auto')
+    expect(confined['AIW_CLAUDE_SETTINGS']).toBe('/data/terminal/sessions/abc.json')
+    const open = buildTerminalEnv(args({ claude: { permissionMode: 'default' } })).env
+    expect(open['AIW_PERMISSION_MODE']).toBe('default')
+    expect(open['AIW_CLAUDE_SETTINGS']).toBeUndefined()
+  })
+
+  it('keeps loopback off the proxy, so the path guard hook reaches the app', () => {
+    const none: Record<string, string> = { PATH: '/usr/bin' }
+    bypassProxyForLoopback(none, 'linux')
+    expect(none).toEqual({ PATH: '/usr/bin' })
+    const linux: Record<string, string> = { https_proxy: 'http://p:8080', no_proxy: 'intra.lan' }
+    bypassProxyForLoopback(linux, 'linux')
+    expect(linux['no_proxy']).toBe('intra.lan,127.0.0.1,localhost')
+    expect(linux['NO_PROXY']).toBeUndefined()
+    const fresh: Record<string, string> = { HTTP_PROXY: 'http://p:8080' }
+    bypassProxyForLoopback(fresh, 'linux')
+    expect(fresh['NO_PROXY']).toBe('127.0.0.1,localhost')
+    expect(fresh['no_proxy']).toBe('127.0.0.1,localhost')
+    const win: Record<string, string> = { HTTPS_PROXY: 'http://p', No_Proxy: 'localhost' }
+    bypassProxyForLoopback(win, 'win32')
+    expect(win).toEqual({ HTTPS_PROXY: 'http://p', No_Proxy: 'localhost,127.0.0.1' })
+  })
 })
 
 describe('claude wrapper', () => {
@@ -202,7 +245,16 @@ describe('claude wrapper', () => {
       'if not defined AIW_CLAUDE_EXE set "AIW_CLAUDE_EXE=C:\\Users\\Max 100%%\\AI Workbench\\claude.exe"',
     )
     expect(lines).toContain(
-      `"%AIW_CLAUDE_EXE%" --append-system-prompt "${TERMINAL_SYSTEM_NOTE}" %*`,
+      `"%AIW_CLAUDE_EXE%" --append-system-prompt "${TERMINAL_SYSTEM_NOTE}" %AIW_MODE_FLAG% %*`,
+    )
+    // Work folder confinement and permission mode of the session, from the environment.
+    expect(lines).toContain('set "AIW_MODE_FLAG="')
+    expect(lines).toContain(
+      'if defined AIW_PERMISSION_MODE set "AIW_MODE_FLAG=--permission-mode %AIW_PERMISSION_MODE%"',
+    )
+    expect(lines).toContain('if defined AIW_CLAUDE_SETTINGS goto confined')
+    expect(lines).toContain(
+      `"%AIW_CLAUDE_EXE%" --append-system-prompt "${TERMINAL_SYSTEM_NOTE}" --settings "%AIW_CLAUDE_SETTINGS%" %AIW_MODE_FLAG% %*`,
     )
     // Everything outside the fallback path is plain ASCII (cmd decodes in the console code page).
     const generic = claudeWrapper('C:\\Users\\Jörg\\claude.exe', 'win32').content
@@ -254,6 +306,20 @@ describe('claude wrapper', () => {
         AIW_TERMINAL_SESSION: 's1',
       })
       expect(withUsage).toContain('OTEL:aiw.terminal=s1')
+      // Settings file and permission mode come before the user's arguments (theirs win).
+      const confined = run({
+        AIW_CLAUDE_SETTINGS: '/data/terminal/sessions/a b.json',
+        AIW_PERMISSION_MODE: 'auto',
+      }).split('\n')
+      expect(confined.slice(0, 7)).toEqual([
+        'ARG:--append-system-prompt',
+        `ARG:${TERMINAL_SYSTEM_NOTE}`,
+        'ARG:--settings',
+        'ARG:/data/terminal/sessions/a b.json',
+        'ARG:--permission-mode',
+        'ARG:auto',
+        'ARG:-p',
+      ])
       // Rewriting with the same content keeps the file untouched.
       const before = readFileSync(file, 'utf8')
       installClaudeWrapper(join(dir, 'bin'), fake, 'linux')

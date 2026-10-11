@@ -1,5 +1,5 @@
 import { mkdirSync, realpathSync, statSync } from 'node:fs'
-import { join } from 'node:path'
+import { delimiter, join } from 'node:path'
 import {
   query,
   type McpSdkServerConfigWithInstance,
@@ -43,6 +43,8 @@ import { isInside } from '../workspace/paths'
 import { buildProviderRuntime } from './providers'
 import { normalizeSdkMessage, type SdkMessageLike } from './normalize'
 import { dangerousCommandHook, PermissionBroker } from './permissions'
+import { pathGuardHook, type GuardRoots } from './path-guard'
+import { buildSandboxSettings, effectivePermissionMode, sandboxStatus } from './sandbox'
 import { WEB_MCP_SERVER, WEB_TOOL_NAMES } from '../web/mcp-server'
 import { createMediaMcpServer, MEDIA_MCP_SERVER, MEDIA_TOOL_NAMES } from '../media/mcp-server'
 import { outputsDir } from '../media/outputs'
@@ -82,6 +84,8 @@ export interface SessionManagerDeps {
 interface ActiveRun {
   abort: AbortController
   query?: Query
+  /** Provider of the main agent, decides which permission modes are available. */
+  provider?: ProviderId
 }
 
 const CHAT_SYSTEM_PROMPT = [
@@ -185,14 +189,17 @@ export class SessionManager {
       model: settings.models[provider] || 'Standard',
       mode: 'code',
       projectPath,
-      permissionMode: 'default',
+      permissionMode: settings.claudePermissionMode,
     })
   }
 
   /** Persists the mode and applies it to a running agent immediately. */
   async setPermissionMode(chatId: string, mode: AgentPermissionMode): Promise<void> {
     this.deps.chats.setPermissionMode(chatId, mode)
-    await this.active.get(chatId)?.query?.setPermissionMode(mode)
+    const run = this.active.get(chatId)
+    if (run?.provider) {
+      await run.query?.setPermissionMode(effectivePermissionMode(mode, run.provider).mode)
+    }
   }
 
   respondToPermission(requestId: string, decision: PermissionDecision, message?: string): boolean {
@@ -390,6 +397,7 @@ export class SessionManager {
       if (route?.usage) recordJev('router', route.usage)
       const settings = route ? applyRole(baseSettings, route.role) : baseSettings
       const provider = settings.activeProvider
+      run.provider = provider
       const modelLabel = settings.models[provider] || 'Standard'
 
       // Only accept attachments that were stored in this chat's folder by the main process.
@@ -438,6 +446,33 @@ export class SessionManager {
       const isCode = chat.mode === 'code' && chat.projectPath !== null
       const cwd = isCode && chat.projectPath ? chat.projectPath : chatWorkspace(dataDir, chatId)
       mkdirSync(cwd, { recursive: true })
+      const addons = this.deps.getAddons?.() ?? { mcpServers: {}, plugins: [], skills: [] }
+
+      // Coding: file tools only inside the project (plus read-only app folders the agent needs);
+      // shell commands in the OS sandbox where it is available.
+      const confine = isCode && baseSettings.confineToWorkFolder
+      const sandbox = confine ? sandboxStatus() : undefined
+      const guardRoots: GuardRoots = {
+        readWrite: [cwd],
+        readOnly: [
+          attachmentsDir,
+          join(dataDir, 'agent-config', 'skills'),
+          ...addons.plugins.map((p) => p.path),
+        ],
+      }
+      const confinement = confine
+        ? {
+            hooks: [pathGuardHook({ roots: guardRoots })],
+            sandbox: sandbox?.active
+              ? buildSandboxSettings({
+                  workFolder: cwd,
+                  readRoots: guardRoots.readOnly,
+                  pathDirs: (runtime.env['PATH'] ?? '').split(delimiter),
+                  hidden: [dataDir],
+                })
+              : undefined,
+          }
+        : undefined
 
       const resume = chats.getSdkSessionId(chatId)
       // MCP server instances cannot be shared between queries, so subagents get fresh ones.
@@ -496,7 +531,6 @@ export class SessionManager {
       const makeJev = () =>
         jevClient ? createJevMcpServer(jevClient, (usage) => recordJev('jev', usage)) : undefined
       const jev = makeJev()
-      const addons = this.deps.getAddons?.() ?? { mcpServers: {}, plugins: [], skills: [] }
       const capabilities = (mode: 'chat' | 'code') =>
         describeAppCapabilities({
           mode,
@@ -527,6 +561,14 @@ export class SessionManager {
           skills: addons.skills,
           plugins: addons.plugins.length,
           mcpServers: Object.keys(addons.mcpServers),
+          confinement: confinement
+            ? { folder: cwd, sandbox: sandbox?.active ?? false }
+            : isCode
+              ? 'off'
+              : null,
+          permissionNote: isCode
+            ? effectivePermissionMode(chat.permissionMode, provider).note
+            : null,
         })
       // Tools that only read the web, create files, ask Jev or load skills never need approval.
       const autoAllowed = [
@@ -550,8 +592,9 @@ export class SessionManager {
         systemNote: string,
         agentProvider: ProviderId,
         agentModel: string,
-      ): Partial<Options> =>
-        isCode
+      ): Partial<Options> => {
+        const permissionMode = effectivePermissionMode(chat.permissionMode, agentProvider).mode
+        return isCode
           ? {
               tools: { type: 'preset', preset: 'claude_code' },
               // user = installed skills (isolated config dir); project = CLAUDE.md, .claude/settings.json.
@@ -565,11 +608,12 @@ export class SessionManager {
                     append: `${CODE_SYSTEM_APPEND}\n\n${systemNote}`,
                   }
                 : `${OPEN_CODING_SYSTEM_PROMPT}\n\n${systemNote}`,
-              permissionMode: chat.permissionMode,
-              ...(chat.permissionMode === 'bypassPermissions'
+              permissionMode,
+              ...(permissionMode === 'bypassPermissions'
                 ? { allowDangerouslySkipPermissions: true }
                 : {}),
-              hooks: { PreToolUse: [dangerousCommandHook()] },
+              hooks: { PreToolUse: [dangerousCommandHook(), ...(confinement?.hooks ?? [])] },
+              ...(confinement?.sandbox ? { sandbox: confinement.sandbox } : {}),
             }
           : {
               // No built-in file/shell tools in chat mode; installed skills stay available.
@@ -579,6 +623,7 @@ export class SessionManager {
               permissionMode: 'default',
               systemPrompt: `${CHAT_SYSTEM_PROMPT}\n\n${systemNote}`,
             }
+      }
 
       const cowork =
         route && baseSettings.coworkSubagents

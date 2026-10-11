@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { AgentPermissionModeSchema } from './permissions'
 
 export const ProviderIdSchema = z.enum(['anthropic', 'openrouter', 'ollama'])
 export type ProviderId = z.infer<typeof ProviderIdSchema>
@@ -129,6 +130,13 @@ export const SettingsSchema = z.object({
   jevSource: JevSourceSchema.default('typesafe'),
   /** Jev model id; empty = latest for the chosen source. */
   jevModel: z.string().default(''),
+  /** Permission mode for `claude` in the terminal and for new coding chats. */
+  claudePermissionMode: AgentPermissionModeSchema.default('default'),
+  /**
+   * Claude Code may only read and change files inside the selected work folder (project folder of
+   * a coding chat, folder of a terminal); shell commands run in the OS sandbox where available.
+   */
+  confineToWorkFolder: z.boolean().default(true),
   /** Version of the stored file, for one-time migrations of old defaults. */
   settingsVersion: z.number().int().default(SETTINGS_VERSION),
 })
@@ -169,6 +177,8 @@ export const SettingsPatchSchema = z
     jevEnabled: z.boolean(),
     jevSource: JevSourceSchema,
     jevModel: z.string().max(200),
+    claudePermissionMode: AgentPermissionModeSchema,
+    confineToWorkFolder: z.boolean(),
   })
   .partial()
 export type SettingsPatch = z.infer<typeof SettingsPatchSchema>

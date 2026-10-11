@@ -3,6 +3,7 @@ import { Terminal, type ITheme } from '@xterm/xterm'
 import { FitAddon } from '@xterm/addon-fit'
 import '@xterm/xterm/css/xterm.css'
 import type { TerminalCreated } from '@shared/schemas/terminal'
+import { PERMISSION_MODE_LABELS } from '@shared/schemas/permissions'
 import { api } from '../../lib/api'
 import { cleanError } from '../../components/ModelPicker'
 
@@ -45,6 +46,25 @@ const DIM = '\x1b[2m'
 const RESET = '\x1b[0m'
 
 const isDark = () => document.documentElement.classList.contains('dark')
+
+/** Lines that tell the user how `claude` will run in this session (mode, folder, sandbox). */
+function claudeInfoLines(claude: TerminalCreated['claude']): string[] {
+  const mode = `Freigabe „${PERMISSION_MODE_LABELS[claude.permissionMode]}“`
+  const lines = [
+    claude.workFolder
+      ? `${DIM}Claude Code: ${mode} · nur im Arbeitsordner ${claude.workFolder}${RESET}`
+      : `${YELLOW}Claude Code: ${mode} · NICHT auf einen Ordner beschränkt (Einstellungen)${RESET}`,
+  ]
+  if (claude.modeNote) lines.push(`${YELLOW}Hinweis: ${claude.modeNote}${RESET}`)
+  if (claude.workFolder) {
+    lines.push(
+      claude.sandbox
+        ? `${DIM}${claude.sandboxSummary}${RESET}`
+        : `${YELLOW}Achtung: ${claude.sandboxSummary}${RESET}`,
+    )
+  }
+  return lines
+}
 
 export interface TerminalPaneHandle {
   /** Types a command into the shell and runs it. */
@@ -170,6 +190,7 @@ export function TerminalPane(props: {
           }
           sessionRef.current = sessionId
           if (info.notice) term.writeln(`${YELLOW}Hinweis: ${info.notice}${RESET}`)
+          for (const line of claudeInfoLines(info.claude)) term.writeln(line)
           // Size may have changed while the shell was starting.
           void api.invoke('terminal:resize', { sessionId, cols: term.cols, rows: term.rows })
           callbacks.current.onStarted?.(info)

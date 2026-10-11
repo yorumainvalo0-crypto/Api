@@ -15,6 +15,7 @@ import {
   ChatSummarySchema,
 } from './schemas/chat'
 import { ConnectionTestResultSchema, ModelInfoSchema } from './schemas/models'
+import { SandboxStatusSchema } from './schemas/permissions'
 import { projectContract } from './ipc-project'
 import { terminalContract, terminalEvents } from './ipc-terminal'
 import { addonsContract } from './ipc-addons'
@@ -44,6 +45,8 @@ export const ipcContract = {
     }),
   },
   'settings:get': { input: z.void(), output: SettingsSchema },
+  /** Whether Claude Code's OS sandbox confines shell commands on this computer. */
+  'claude:sandbox-status': { input: z.void(), output: SandboxStatusSchema },
   'updates:check': { input: z.void(), output: UpdateStatusSchema },
   /** Current updater state without starting a new check. */
   'updates:status': { input: z.void(), output: UpdateStatusSchema },
