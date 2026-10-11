@@ -61,6 +61,12 @@ Umgesetzt per Opus-Subagent, von mir geprüft.
   - Lesen und Schreiben außerhalb des Ordners wird abgelehnt, auch im Modus „Alles erlauben“.
   - Innerhalb des Ordners funktioniert es, Tests per Befehl laufen.
   - Mit Sandbox ist der Home-Ordner für Befehle unsichtbar.
+- ⚠️ **Zwei Windows-Probleme in der CI gefunden und behoben:**
+  - Ein Test nutzte den kurzen 8.3-Pfad des Testordners (`RUNNER~1`); das lag am Test, nicht
+    an der App.
+  - Die App stürzte beim Beenden ab, wenn eine Terminal-Shell noch herunterfuhr (ConPTY).
+    Jetzt schließt sie zuerst alle Shells und wartet höchstens 3 Sekunden.
+  - Danach war die Windows-CI grün und der Stand ging nach `main`.
 
 ### 2026-10-10 19:56 – v0.3.0: Terminal mit Claude Code, Cowork-Modus, Coding-Prompt, ComfyUI ✅
 
