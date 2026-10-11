@@ -49,7 +49,7 @@ describe.skipIf(process.platform === 'win32')(
     let script: MockTurn['toolUse'][] = []
 
     beforeAll(async () => {
-      dir = realpathSync(mkdtempSync(join(tmpdir(), 'aiw-term-confine-')))
+      dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'aiw-term-confine-')))
       // The sandbox hides the home directory; use a throwaway one with a "private" file.
       process.env['HOME'] = join(dir, 'home')
       mkdirSync(join(dir, 'home'))

@@ -51,7 +51,7 @@ describe('work folder confinement of the coding chat (real runtime, scripted mod
         ? { text: 'Fertig.' }
         : { text: 'Los geht es.', toolUse: nextTool },
     )
-    dir = realpathSync(mkdtempSync(join(tmpdir(), 'aiw-confine-')))
+    dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'aiw-confine-')))
     // The sandbox hides the home directory; use a throwaway one with a "private" folder.
     process.env['HOME'] = join(dir, 'home')
     outside = join(dir, 'home', 'geheim')
@@ -236,7 +236,7 @@ describe('auto permission mode of the runtime', () => {
   let dir: string
 
   beforeAll(() => {
-    dir = realpathSync(mkdtempSync(join(tmpdir(), 'aiw-auto-')))
+    dir = realpathSync.native(mkdtempSync(join(tmpdir(), 'aiw-auto-')))
   })
 
   afterAll(() => rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 200 }))
@@ -259,7 +259,7 @@ describe('auto permission mode of the runtime', () => {
           }
     })
     try {
-      const project = mkdtempSync(join(dir, 'p-'))
+      const project = realpathSync.native(mkdtempSync(join(dir, 'p-')))
       const runtime = buildProviderRuntime({
         provider: 'ollama',
         settings: {
