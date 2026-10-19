@@ -7,7 +7,7 @@ Stand: 19.10.2026 · Status: Planung (noch nichts auf dem Server umgesetzt)
 Das bestehende „A-B Cloud AI Portal“ auf `ai.dev.a-b-cloud.de` wird durch eine Claude.ai-ähnliche
 Oberfläche ersetzt, in der eingeladene Personen per **QR-Code** beitreten, Claude (Anthropic API) und
 nutzen, **Dateien hochladen und erzeugen**, **Bilder/Sprache/Video**
-generieren – jeweils mit einem **Budget in US-Dollar**, das der Admin festlegt und überwacht.
+generieren und **technische 3D-Modelle (3D-Druck/CAD) mit 3D-Vorschau** erstellen – jeweils mit einem **Budget in US-Dollar**, das der Admin festlegt und überwacht.
 
 ## 1. Anforderungen
 
@@ -24,6 +24,8 @@ generieren – jeweils mit einem **Budget in US-Dollar**, das der Admin festlegt
 | A9  | **Bild-, Sprach- und Video-Generierung** bleibt – über **OpenRouter-Key**, ebenfalls aus dem USD-Budget bezahlt    | Media-Dienst (MCP) (§6.6)               |
 | A10 | OpenRouter-Modelle im Chat **vorerst nicht anzeigen** (später zuschaltbar)                                         | Konfiguration (§4.1)                    |
 | A11 | Docker-Port nach Vorgabe des Admins                                                                                | Platzhalter `LIBRECHAT_HOST_PORT` (§3)  |
+| A12 | AI erzeugt **technische 3D-Teile** (maßgenau, für 3D-Druck) mit **interaktiver 3D-Vorschau** im Web                | CAD-Dienst + 3D-Viewer (§6.7)           |
+| A13 | Claude Fable **nicht** freischalten                                                                                | Modellliste (§4.1)                      |
 
 ## 2. Ist-Zustand (geprüft am 19.10.2026)
 
@@ -48,7 +50,8 @@ generieren – jeweils mit einem **Budget in US-Dollar**, das der Admin festlegt
    ─ Model-Specs (Standard Opus 5.5 / medium)          ─ Budgets USD (setzen, aufladen, Monats-Reset)
               │            │                           ─ Admin-Dashboard (USD/Tokens)
               │            └── MCP (HTTP) ───────────▶ ─ Media-Dienst: Bild/Sprache/Video via OpenRouter
-              │                                                  │
+              │                                        ─ CAD-Dienst + 3D-Viewer (/portal/view/…)
+              │                                                  │──▶ CAD-Runner (Sandbox, kein Netz)
               ├──▶ Code-Interpreter (Sandbox, Dateiausgabe)      │
               ▼                                                  ▼
           MongoDB  ◀──────── liest transactions / schreibt balances ┘
@@ -72,6 +75,7 @@ generieren – jeweils mit einem **Budget in US-Dollar**, das der Admin festlegt
 | ------------ | ------------------------------------------------------ | ------------------------------------------------------------ |
 | `anthropic`  | Claude direkt (Opus 5.5, Sonnet 5.5, Haiku 5.5)         | eingebaute Tabelle: Opus 5.5 $4/$20, Sonnet 5.5 $2/$10, Haiku 5.5 $0,10/$0,50 pro 1 M Tokens |
 | `agents`     | Claude **mit Werkzeugen** (Code/Dateien, Media, Skills) | wie das zugrunde liegende Modell                             |
+| ~~Fable~~    | **bewusst nicht freigeschaltet** (`claude-fable-5-1` fehlt in `ANTHROPIC_MODELS`)          | – |
 | `OpenRouter` | **vorerst ausgeblendet** – andere Chat-Modelle (GPT, Gemini …), später per Config zuschaltbar | automatisch aus OpenRouters `/models`-Preisliste |
 
 ### 4.2 Guthaben (technische Basis für §6.4)
@@ -139,8 +143,9 @@ LibreChat legt den Benutzer beim ersten OIDC-Login automatisch an
 | `/portal/l/:token`          | Login per QR-Code                                         |
 | `/portal/oidc/*`            | OIDC-Endpunkte für LibreChat (Discovery, Auth, Token)     |
 | `/portal/admin/*`           | Admin-Oberfläche + Admin-API                              |
-| `/portal/files/:id`         | signierte Download-Links für Media-Dateien                |
-| `/portal/mcp`               | Media-MCP (nur aus dem Docker-Netz erreichbar, nicht über nginx) |
+| `/portal/files/:id`         | signierte Download-Links für Media- und 3D-Dateien        |
+| `/portal/view/:id`          | interaktive 3D-Vorschau eines Modells (§6.7)              |
+| `/portal/mcp`               | MCP für Media + CAD (nur aus dem Docker-Netz erreichbar, nicht über nginx) |
 
 ### 6.2 Gruppen & Einladungs-QR (A2, A3)
 
@@ -226,7 +231,55 @@ Claude als Werkzeug nutzt („Erstelle ein Bild von …“).
 - ⚠ Im PoC prüfen: Welche Sprach-/Video-Modelle OpenRouter aktuell anbietet – Modelle und Parameter
   aus dem alten Portal übernehmen.
 
-### 6.7 Datenmodell (DB „portal“)
+### 6.7 CAD-Dienst: technische 3D-Teile mit 3D-Vorschau (A12)
+
+**Idee:** Claude beschreibt das Teil als **CAD-Code** (Python mit **build123d**, alternativ CadQuery) –
+maßgenau in Millimetern, parametrisch, beliebig oft änderbar („Wand 2 mm dicker“, „Loch auf M4“).
+Ein eigener, abgeschotteter **CAD-Runner** führt den Code aus und erzeugt Dateien + Vorschau.
+Kosten: nur die Claude-Tokens, keine Gebühr pro Modell.
+
+**Werkzeuge (im MCP-Server des Gateways):**
+
+| Werkzeug        | Eingabe                                         | Ergebnis im Chat                                                                 |
+| --------------- | ----------------------------------------------- | -------------------------------------------------------------------------------- |
+| `cad_build`     | CAD-Code, Name, gewünschte Formate              | **Vorschaubild** (4 Ansichten) direkt im Chat, Maße (B × T × H mm), Volumen, Link „**In 3D ansehen**“, Downloads |
+| `cad_inspect`   | Modell-ID                                       | Maße, Volumen, Oberfläche, wasserdicht ja/nein, dünne Wände/Überhänge-Hinweis (3D-Druck) |
+| `model_preview` | hochgeladene STL/3MF/STEP-Datei                 | Vorschaubild + Viewer-Link für vorhandene Modelle                                |
+
+**Ausgabeformate:** **STL** (3D-Druck), **3MF** (3D-Druck mit Einheiten), **STEP** (Weiterbearbeitung in
+Fusion/FreeCAD/SolidWorks), **GLB** (für den Viewer) und der **CAD-Quellcode** (`.py`) zum Nachbauen.
+
+**3D-Viewer (`/portal/view/:id`):**
+- three.js (STL-/3MF-/GLB-Loader), Drehen/Zoomen/Verschieben mit Maus und Touch (auch am Handy).
+- Anzeige: Maße als Bounding-Box in mm, Raster in mm, Drahtgitter, Schnittansicht, Standardansichten
+  (oben/vorne/seitlich/iso), Farbe/Material, Vollbild.
+- **Versionen:** Jede Änderung im Chat erzeugt eine neue Version; im Viewer zwischen v1, v2, … wechseln.
+- Download-Buttons für alle Formate. Zugriff nur für den Ersteller (Sitzung) bzw. per signiertem Link.
+- Im PoC zusätzlich testen: Viewer **direkt im Chat** als LibreChat-Artifact einbetten
+  (HTML mit three.js lädt GLB vom Gateway). Klappt das, erscheint die 3D-Ansicht ohne Klick im Chat;
+  sonst bleibt es beim Vorschaubild + Link.
+
+**Ablauf:**
+```
+Nutzer: „Halterung für ein 25-mm-Rohr, 3 mm Wand, zwei M4-Schraublöcher“
+  → Claude schreibt build123d-Code → cad_build(code, formats=[stl, step, 3mf])
+  → CAD-Runner: Code ausführen (Timeout 60 s) → Export STL/STEP/3MF/GLB → Vorschaubilder rendern
+  → Gateway speichert Version, liefert Bild + Maße + Viewer-Link + Downloads an den Chat
+Nutzer: „Löcher auf M5 und 10 mm höher“ → Claude ändert Parameter → neue Version
+```
+
+**CAD-Runner (eigener Container):**
+- Image mit Python, build123d, CadQuery, OCP/OpenCascade, trimesh, numpy, pyrender/OSMesa (Rendern ohne GPU).
+- **Abschottung:** kein Netzwerk, Nur-Lese-Dateisystem außer `/out`, nicht-root, CPU 2 / RAM 2 GB / 60 s
+  pro Auftrag, max. 2 Aufträge gleichzeitig, Ausgabe max. 100 MB. Code wird vor dem Start nicht
+  vertraut – die Sandbox ist die Sicherheitsgrenze.
+- Gateway ↔ Runner über interne Warteschlange (einfacher HTTP-Job-Endpunkt im Docker-Netz).
+
+**Skill „CAD für 3D-Druck“** (LibreChat Deployment Skill): Anleitung für Claude – build123d-Muster,
+Einheiten mm, Toleranzen für FDM (z. B. +0,2 mm bei Passungen), Mindestwandstärke, Druckausrichtung,
+Gewinde/Senkungen, immer parametrisch mit benannten Variablen oben im Code.
+
+### 6.8 Datenmodell (DB „portal“)
 
 ```text
 admins        { _id, username, passwordHash, totpSecret, createdAt }
@@ -239,16 +292,20 @@ loginLinks    { _id, userId, tokenHash, maxUses, uses, expiresAt, note, revokedA
 devices       { _id, userId, createdAt, lastSeenAt, userAgent, revokedAt }
 budgetEvents  { _id, userId, type: start|topup|reset|block|media, amountUsd, by, at, note }
 mediaFiles    { _id, userId, kind, model, costUsd, path, mime, size, expiresAt }
+cadModels     { _id, userId, conversationId, name, createdAt }
+cadVersions   { _id, modelId, version, code, status: ok|error, error, bbox, volumeMm3,
+                files: { stl, step, threemf, glb, previewPng }, createdAt }
 ```
 
 Tokens (Einladung, Login) sind 128 Bit zufällig und werden **nur gehasht** gespeichert.
 
-### 6.8 Sicherheit
+### 6.9 Sicherheit
 
 - QR-Codes sind Zugangsschlüssel → kurze Laufzeit, Einmal-Nutzung als Standard, Widerruf, Hinweis im UI.
 - Rate-Limits auf `/portal/join`, `/portal/l`, Admin-Login; Benutzernamen-Sperrliste (admin, root …).
 - Admin-API nur mit Admin-Sitzung + CSRF-Schutz; Audit-Log aller Admin-Aktionen.
-- MongoDB, Code-Interpreter und MCP nur im Docker-Netz; öffentlich ist ausschließlich nginx.
+- MongoDB, Code-Interpreter, CAD-Runner und MCP nur im Docker-Netz; öffentlich ist ausschließlich nginx.
+- CAD-Runner ohne Netzwerkzugang, mit Ressourcen- und Zeitlimits (§6.7).
 
 ## 7. Server & Betrieb
 
@@ -273,9 +330,10 @@ Tokens (Einladung, Login) sind 128 Bit zufällig und werden **nur gehasht** gesp
 | M5 | Budgets: Start, Aufladen, Monats-Reset, Sperren                                                           | 1–2 Tage | leeres Budget blockiert, Aufladen schaltet sofort frei                         |
 | M6 | Admin-Dashboard (USD/Tokens, Benutzer/Modell/Gruppe, CSV)                                                 | 2–3 Tage | Zahlen stimmen mit Stichprobe aus `transactions` und Anthropic-Console überein |
 | M7 | Media-Dienst (Bild, Sprache, Video via OpenRouter) inkl. Abrechnung                                       | 2–3 Tage | Bild im Chat, Kosten im Budget und Dashboard sichtbar                          |
+| M7b | CAD-Dienst: CAD-Runner, `cad_build`/`cad_inspect`/`model_preview`, 3D-Viewer mit Versionen, CAD-Skill | 3–4 Tage | „Halterung …“ ergibt STL/STEP/3MF mit korrekten Maßen, Viewer läuft am Handy |
 | M8 | Härtung, Tests, Backup/Restore, Umschalten auf `ai.dev.a-b-cloud.de`, altes Portal stoppen               | 1–2 Tage | Checkliste §9 vollständig                                                       |
 
-**Gesamt: ca. 14–20 Arbeitstage.** M1–M2 liefern schon ein nutzbares System (Accounts per CLI),
+**Gesamt: ca. 17–24 Arbeitstage.** M1–M2 liefern schon ein nutzbares System (Accounts per CLI),
 M3–M5 ersetzen dann CLI durch QR-Codes, M6–M7 runden ab.
 
 **Rollback** bis M8 jederzeit: alte nginx-Site-Datei (`.old-portal`) zurück, alte App starten.
@@ -290,6 +348,9 @@ M3–M5 ersetzen dann CLI durch QR-Codes, M6–M7 runden ab.
 - [ ] Budget: leer → blockiert; +5 USD → sofort frei; Monats-Reset korrekt
 - [ ] Dashboard-Summen = Anthropic-/OpenRouter-Abrechnung (±2 %)
 - [ ] Media: Bild/Audio/Video werden erzeugt und abgebucht
+- [ ] 3D: Teil mit Maßvorgabe → STL/3MF/STEP stimmen (Maße im Slicer geprüft), Viewer zeigt Maße und Versionen
+- [ ] CAD-Runner: Code mit Netzwerkzugriff/Endlosschleife wird blockiert bzw. nach 60 s abgebrochen
+- [ ] Fable ist im Chat nicht auswählbar
 - [ ] Backup + Restore getestet, Monitoring aktiv
 
 ## 10. Offene Punkte
@@ -299,5 +360,6 @@ M3–M5 ersetzen dann CLI durch QR-Codes, M6–M7 runden ab.
 3. Standardbudgets: pro Person z. B. 5 USD/Monat? Reset monatlich zum 1. oder 30 Tage ab Beitritt?
 4. Zugriff auf den Code/die Config des alten Portals (für OpenRouter-Modelle Bild/Sprache/Video).
 5. Websuche für Claude gewünscht? (verursacht Zusatzkosten pro Suche)
+6. 3D-Druck: Welcher Drucker/Slicer (z. B. Bambu, Prusa) – für passende Toleranzen und Bauraum-Prüfung im CAD-Skill?
 
 Konfigurationsvorlagen: [`deploy/librechat/`](../deploy/librechat/)

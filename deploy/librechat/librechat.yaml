@@ -87,9 +87,9 @@ modelSpecs:
         model: "claude-opus-5-5"
         effort: "medium"
 
-# Media tools (image, speech, video via OpenRouter) served by the portal gateway (milestone M7)
+# Media tools (image, speech, video via OpenRouter, M7) and CAD tools (3D parts, M7b) served by the portal gateway
 mcpServers:
-  media:
+  portal:
     type: streamable-http
     url: http://portal-gateway:8080/portal/mcp
     headers:
