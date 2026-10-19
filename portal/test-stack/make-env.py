@@ -62,6 +62,9 @@ gateway = {
     "PORTAL_ADMIN_PASSWORD": "test-admin-password",
     "USER_EMAIL_DOMAIN": "users.portal.test",
     "COOKIE_SECURE": "true",
+    "OPENROUTER_API_KEY": "sk-or-test",
+    "OPENROUTER_BASE_URL": "http://mocks:8080/api/v1",
+    "MEDIA_DIR": "/data/media",
 }
 (here / "gateway.env").write_text("".join(f"{k}={v}\n" for k, v in gateway.items()))
 print("wrote test.env and gateway.env")

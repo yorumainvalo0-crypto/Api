@@ -8,10 +8,12 @@ import { registerMcpRoute } from './mcp.js'
 import { createProvider } from './oidc.js'
 import { registerAdminRoutes } from './routes/admin.js'
 import { registerAuthRoutes } from './routes/auth.js'
+import { registerFileRoutes } from './routes/files.js'
 import { registerGroupRoutes } from './routes/groups.js'
 import { registerJoinRoutes } from './routes/join.js'
 import { registerUsageRoutes } from './routes/usage.js'
 import { accountStatusTool } from './tools/account.js'
+import { mediaTools } from './tools/media.js'
 import type { AppContext } from './web.js'
 
 export interface BuildOptions {
@@ -54,7 +56,8 @@ export async function buildApp({ config, db, logger = false }: BuildOptions): Pr
     registerGroupRoutes(web, ctx)
     registerJoinRoutes(web, ctx)
     registerUsageRoutes(web, ctx)
-    registerMcpRoute(web, ctx, [accountStatusTool])
+    registerFileRoutes(web, ctx)
+    registerMcpRoute(web, ctx, [accountStatusTool, ...mediaTools])
   })
 
   return app

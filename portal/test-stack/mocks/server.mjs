@@ -9,6 +9,9 @@ const OUTPUT_TOKENS = Number(process.env.MOCK_OUTPUT_TOKENS ?? 500)
 const REPLY = process.env.MOCK_REPLY ?? 'Hallo vom Test-Claude.'
 
 const requests = []
+// 64x64 teal PNG for generated images
+const TEST_PNG =
+  'iVBORw0KGgoAAAANSUhEUgAAAEAAAABACAIAAAAlC+aJAAAAeUlEQVR4nO3PwQkAIBDAsNvATX06v0P4CEKhA6Szzv664YIGtKABLWhACxrQgga0oAEtaEALGtCCBrSgAS1oQAsa0IIGtKABLWhACxrQgga0oAEtaEALGtCCBrSgAS1oQAsa0IIGtKABLWhACxrQgga0oAEtaEALHru5GzDiczfnBgAAAABJRU5ErkJggg=='
 // Scripted tool calls: when a prompt contains `trigger`, answer with a tool_use first,
 // then with `reply` once the tool result comes back
 const scenarios = []
@@ -22,9 +25,18 @@ function hasToolResult(message) {
   return Array.isArray(message?.content) && message.content.some((block) => block.type === 'tool_result')
 }
 
+/** Scenarios match the latest text the user typed (not tool results, not older turns). */
 function findScenario(body) {
-  const text = JSON.stringify(body?.messages ?? [])
-  return scenarios.find((s) => text.includes(s.trigger))
+  const messages = body?.messages ?? []
+  for (let i = messages.length - 1; i >= 0; i--) {
+    const message = messages[i]
+    if (message.role !== 'user') continue
+    const blocks = typeof message.content === 'string' ? [{ type: 'text', text: message.content }] : message.content
+    const text = blocks.filter((b) => b.type === 'text').map((b) => b.text).join(' ')
+    if (!text) continue
+    return scenarios.find((s) => text.includes(s.trigger))
+  }
+  return undefined
 }
 
 function streamToolUse(res, model, tool, input) {
@@ -152,6 +164,26 @@ const server = http.createServer(async (req, res) => {
   }
 
   requests.push({ method: req.method, path: url.pathname, headers: req.headers, body, at: Date.now() })
+
+  // OpenRouter media endpoints (images, speech, videos) for the gateway's media tools
+  if (url.pathname === '/api/v1/images' && req.method === 'POST') {
+    return sendJson(res, 200, { data: [{ b64_json: TEST_PNG, media_type: 'image/png' }], usage: { cost: 0.04 } })
+  }
+  if (url.pathname === '/api/v1/audio/speech' && req.method === 'POST') {
+    res.writeHead(200, { 'content-type': 'audio/mpeg', 'x-generation-id': `gen-${requests.length}` })
+    return res.end(Buffer.from('ID3test-mp3'))
+  }
+  if (url.pathname === '/api/v1/generation') return sendJson(res, 200, { data: { total_cost: 0.002 } })
+  if (url.pathname === '/api/v1/videos' && req.method === 'POST') {
+    return sendJson(res, 202, { id: `vid-${requests.length}`, status: 'pending' })
+  }
+  if (/^\/api\/v1\/videos\/[^/]+$/.test(url.pathname)) {
+    return sendJson(res, 200, { status: 'completed', usage: { cost: 0.5 } })
+  }
+  if (/^\/api\/v1\/videos\/[^/]+\/content$/.test(url.pathname)) {
+    res.writeHead(200, { 'content-type': 'video/mp4' })
+    return res.end(Buffer.from('....ftypmp42test-video'))
+  }
 
   // Anthropic Messages API (SDK may call /messages or /v1/messages depending on base URL)
   if (req.method === 'POST' && url.pathname.endsWith('/messages')) {

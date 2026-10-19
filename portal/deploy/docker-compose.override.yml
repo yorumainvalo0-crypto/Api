@@ -33,6 +33,9 @@ services:
     env_file: ./portal-gateway.env
     depends_on:
       - mongodb
+    volumes:
+      # Generated images, audio and videos (uid 1000 must be able to write)
+      - /opt/portal-data/media:/data/media
     ports:
       - "127.0.0.1:${PORTAL_HOST_PORT:?set PORTAL_HOST_PORT in .env}:8080"
 

@@ -109,6 +109,8 @@ mcpServers:
   portal:
     type: streamable-http
     url: http://portal-gateway:8080/portal/mcp
+    # Image generation can take a while
+    timeout: 180000
     headers:
       Authorization: "Bearer ${PORTAL_MCP_TOKEN}"
     # Sent with every tool call so the gateway knows whose budget to use

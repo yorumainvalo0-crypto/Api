@@ -24,6 +24,8 @@ services:
     image: portal-gateway:dev
     depends_on: [mongodb]
     env_file: gateway.env
+    volumes:
+      - ./data/media:/data/media
     ports:
       - "127.0.0.1:3090:8080"
 

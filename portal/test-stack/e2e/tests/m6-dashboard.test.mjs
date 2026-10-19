@@ -40,7 +40,11 @@ test('the total for today equals the spending booked in LibreChat today', async 
   const expected = await withMongo(async (lc) => {
     const rows = await lc
       .collection('transactions')
-      .find({ tokenType: { $in: ['prompt', 'completion'] }, tokenValue: { $lt: 0 } })
+      // Token usage plus media charges (M7), as the dashboard counts them
+      .find({
+        tokenValue: { $lt: 0 },
+        $or: [{ tokenType: { $in: ['prompt', 'completion'] } }, { tokenType: 'credits', context: 'media' }],
+      })
       .toArray()
     const today = new Intl.DateTimeFormat('en-CA', { timeZone: 'Europe/Berlin' }).format(new Date())
     return rows

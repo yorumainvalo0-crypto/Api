@@ -8,8 +8,9 @@ printf 'CODE_WORK_DIR=%s\n' "$PWD/data/code-work" > .env
 docker compose down -v --remove-orphans >/dev/null 2>&1 || true
 rm -rf data
 # LibreChat runs as uid 1000 inside the container
-mkdir -p data/uploads data/images data/logs data/mongo data/certs data/code-work data/code-store
-chmod -R 777 data/uploads data/images data/logs
+mkdir -p data/uploads data/images data/logs data/mongo data/certs data/code-work data/code-store data/media
+# LibreChat and the gateway run as uid 1000 (node) inside their containers
+chmod -R 777 data/uploads data/images data/logs data/media
 
 # Test CA + certificate for portal.test (LibreChat only talks OIDC over HTTPS)
 openssl req -x509 -newkey rsa:2048 -nodes -days 3 -subj "/CN=Portal Test CA" \

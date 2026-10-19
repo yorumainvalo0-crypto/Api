@@ -16,18 +16,39 @@ MongoDB und Test-Doubles für Anthropic/OpenRouter). Auf dem Hetzner-Server ist 
 | M4      | Gruppen + Einladungs-QR                              | ✅ fertig       | ✅ 6 + 4 |
 | M5      | Budgets in USD                                       | ✅ fertig       | ✅ 6 + 3 |
 | M6      | Admin-Dashboard                                      | ✅ fertig       | ✅ 6 + 3 |
-| M7      | Media (Bild/Sprache/Video via OpenRouter)            | ⏳ in Arbeit    |      |
-| M7b     | CAD-Dienst + 3D-Viewer                               | offen          |      |
+| M7      | Media (Bild/Sprache/Video via OpenRouter)            | ✅ fertig       | ✅ 8 + 4 |
+| M7b     | CAD-Dienst + 3D-Viewer                               | ⏳ in Arbeit    |      |
 | M8      | Härtung, Backup/Restore, Go-live-Anleitung           | offen          |      |
 
 ## Wartet auf dich
 
 - **Docker-Port** für LibreChat (`LIBRECHAT_HOST_PORT`) und Gateway (`PORTAL_HOST_PORT`) – Platzhalter sind gesetzt.
 - Server-Bestandsaufnahme ausführen (siehe M0) und Ausgabe schicken.
+- **Media-Modelle** prüfen/festlegen (Standard: Bilder `google/gemini-2.5-flash-image`, Sprache
+  `openai/gpt-4o-mini-tts`, Video `google/veo-3.1`) – gern die Modelle aus dem alten Portal nennen.
 - **Websuche** (Schalter „Web Search“ in LibreChat): ja oder nein? LibreChat bucht die Suchkosten
   **nicht** vom Guthaben ab. Bis zur Entscheidung: in der Anthropic Console für den Workspace abschalten.
 
 ## Log
+
+### 19.10.2026 – M7 fertig (Bild, Sprache, Video über OpenRouter)
+
+- Neue Werkzeuge für Claude im Gateway (MCP), bezahlt aus dem **USD-Budget** der Person:
+  - `bild_erstellen` – Bild aus Beschreibung, **erscheint direkt im Chat**, plus Download-Link.
+  - `bild_bearbeiten` – ein zuvor erzeugtes Bild verändern (nur eigene Bilder).
+  - `sprache_erstellen` – Text → MP3 zum Anhören/Herunterladen.
+  - `video_erstellen` + `video_status` – Video läuft im Hintergrund (dauert Minuten); das Gateway
+    holt es ab, rechnet ab und Claude liefert auf Nachfrage den Link.
+- Abrechnung mit den **echten Kosten von OpenRouter** (bei Sprache Schätzung nach Zeichen, falls
+  OpenRouter keine Kosten meldet). Vor jeder Anfrage Prüfung, ob genug Guthaben da ist; bei
+  Fehlern von OpenRouter wird nichts abgebucht. Media-Kosten erscheinen im Dashboard.
+- Dateien 30 Tage gespeichert; Download-Links sind signiert und laufen nach 7 Tagen ab.
+- **Tests:** 8 Gateway-Tests (mit OpenRouter-Test-Double: Kosten, zu wenig Guthaben, Fehler ohne
+  Abbuchung, fremde Bilder, Sprache echt/geschätzt, Video asynchron genau einmal / Fehlschlag kostenlos)
+  + 4 Browser-Tests (Bild im Chat, MP3-Link, Video-Ablauf, Kosten im Dashboard).
+  **Gesamt: 51 Gateway- + 26 Browser-Tests grün.**
+- Screenshot: [Bild im Chat](screenshots/chat-bild.png)
+
 
 ### 19.10.2026 – M6 fertig (Verbrauchs-Dashboard)
 

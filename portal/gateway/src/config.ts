@@ -20,6 +20,21 @@ const schema = z.object({
   USER_EMAIL_DOMAIN: z.string().default('users.portal.invalid'),
   /** Device sessions stay valid this long */
   DEVICE_SESSION_DAYS: z.coerce.number().int().positive().default(180),
+  // --- Media tools via OpenRouter (image, speech, video) ---
+  OPENROUTER_API_KEY: z.string().default(''),
+  OPENROUTER_BASE_URL: z.url().default('https://openrouter.ai/api/v1'),
+  MEDIA_DIR: z.string().default('/data/media'),
+  MEDIA_RETENTION_DAYS: z.coerce.number().positive().default(30),
+  IMAGE_MODEL: z.string().default('google/gemini-2.5-flash-image'),
+  TTS_MODEL: z.string().default('openai/gpt-4o-mini-tts-2025-12-15'),
+  TTS_VOICE: z.string().default('alloy'),
+  /** Fallback price when OpenRouter reports no cost for a speech request */
+  TTS_USD_PER_1K_CHARS: z.coerce.number().nonnegative().default(0.015),
+  VIDEO_MODEL: z.string().default('google/veo-3.1'),
+  /** Minimum remaining balance before a media request is sent (rough upper cost per call) */
+  IMAGE_MIN_BALANCE_USD: z.coerce.number().nonnegative().default(0.2),
+  TTS_MIN_BALANCE_USD: z.coerce.number().nonnegative().default(0.05),
+  VIDEO_MIN_BALANCE_USD: z.coerce.number().nonnegative().default(3),
   /** Set to false only for local http testing */
   COOKIE_SECURE: z
     .enum(['true', 'false'])
