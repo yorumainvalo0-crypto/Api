@@ -5,37 +5,103 @@ cache: true
 
 interface:
   customWelcome: "Willkommen im A-B Cloud AI Portal"
+  modelSelect: true
+  parameters: true
+  # Show balance and per-chat cost in USD
+  currency:
+    code: "USD"
+    rate: 1
+  contextUsage: true
+  contextCost: true
   # Enable once a RAG embeddings provider is configured
   fileSearch: false
   termsOfService:
     modalAcceptance: true
     modalTitle: "Nutzungsbedingungen"
     modalContent: |
-      Dieses Portal nutzt die Anthropic API. Deine Eingaben und hochgeladenen Dateien
-      werden zur Verarbeitung an Anthropic (USA) übertragen.
+      Dieses Portal nutzt die Anthropic API und OpenRouter. Deine Eingaben und hochgeladenen
+      Dateien werden zur Verarbeitung an diese Anbieter übertragen.
 
       - Es gilt die Usage Policy von Anthropic: https://www.anthropic.com/legal/aup
       - Keine vertraulichen Kundendaten oder Passwörter eingeben.
-      - Jeder Account hat ein monatliches Budget; ist es aufgebraucht, sind bis zur
+      - Jeder Account hat ein Budget in US-Dollar; ist es aufgebraucht, sind bis zur
         nächsten Aufladung keine Anfragen möglich.
 
 registration:
-  socialLogins: []
+  socialLogins: ["openid"]
 
-# 1,000,000 credits = 1 USD
+# 1,000,000 credits = 1 USD. Start budget, top-ups and monthly resets are done by the
+# portal gateway per user, so LibreChat's own refill stays off.
 balance:
   enabled: true
-  startBalance: 5000000
-  autoRefillEnabled: true
-  refillIntervalValue: 30
-  refillIntervalUnit: "days"
-  refillAmount: 5000000
-  # Monthly allowance without rollover
-  refillMode: "reset"
+  startBalance: 0
+  autoRefillEnabled: false
+  display: "currency"
+
+endpoints:
+  agents:
+    capabilities: ["execute_code", "skills", "artifacts", "tools", "context", "ocr"]
+  custom:
+    - name: "OpenRouter"
+      apiKey: "${OPENROUTER_KEY}"
+      baseURL: "https://openrouter.ai/api/v1"
+      models:
+        default: ["openai/gpt-5"]
+        # Also fetches OpenRouter's prices for balance accounting
+        fetch: true
+      titleConvo: true
+      titleModel: "current_model"
+      dropParams: ["stop"]
+      modelDisplayLabel: "OpenRouter"
+
+# Default: Claude Opus 5.5 with medium effort; users may switch model and effort.
+# The agent_id values come from agents created once in the UI (milestone M1/M2).
+modelSpecs:
+  enforce: false
+  prioritize: true
+  list:
+    - name: "opus-5-5"
+      label: "Claude Opus 5.5"
+      description: "Standard – mit Dateien, Bildern und Code"
+      default: true
+      preset:
+        endpoint: "agents"
+        agent_id: "REPLACE_WITH_OPUS_AGENT_ID"
+    - name: "sonnet-5-5"
+      label: "Claude Sonnet 5.5"
+      description: "Schneller und günstiger"
+      preset:
+        endpoint: "agents"
+        agent_id: "REPLACE_WITH_SONNET_AGENT_ID"
+    - name: "haiku-5-5"
+      label: "Claude Haiku 5.5"
+      description: "Sehr günstig für einfache Aufgaben"
+      preset:
+        endpoint: "agents"
+        agent_id: "REPLACE_WITH_HAIKU_AGENT_ID"
+    - name: "opus-5-5-plain"
+      label: "Claude Opus 5.5 (ohne Werkzeuge)"
+      preset:
+        endpoint: "anthropic"
+        model: "claude-opus-5-5"
+        effort: "medium"
+
+# Media tools (image, speech, video via OpenRouter) served by the portal gateway (milestone M7)
+mcpServers:
+  media:
+    type: streamable-http
+    url: http://portal-gateway:8080/portal/mcp
+    headers:
+      Authorization: "Bearer ${PORTAL_MCP_TOKEN}"
+      X-User-ID: "{{LIBRECHAT_USER_ID}}"
 
 fileConfig:
   endpoints:
     anthropic:
+      fileLimit: 10
+      fileSizeLimit: 20
+      totalSizeLimit: 50
+    agents:
       fileLimit: 10
       fileSizeLimit: 20
       totalSizeLimit: 50

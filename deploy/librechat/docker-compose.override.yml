@@ -1,5 +1,6 @@
 # Copy into the LibreChat checkout next to docker-compose.yml.
 # Requires Docker Compose v2.24+ (for the !override tag).
+# LIBRECHAT_HOST_PORT is set in .env (port given by the admin).
 
 services:
   api:
@@ -7,7 +8,7 @@ services:
     image: registry.librechat.ai/librechat-ai/librechat:latest
     # Docker publishes ports past ufw, so bind to localhost only; nginx proxies to it.
     ports: !override
-      - "127.0.0.1:3080:3080"
+      - "127.0.0.1:${LIBRECHAT_HOST_PORT:?set LIBRECHAT_HOST_PORT in .env}:3080"
     volumes:
       - type: bind
         source: ./librechat.yaml
@@ -17,3 +18,12 @@ services:
     # Not public: reach it through an SSH tunnel (ssh -L 3000:127.0.0.1:3000 <server>).
     ports: !override
       - "127.0.0.1:3000:3000"
+
+  # Added in milestone M3 (see docs/WEB-HOSTING-PLAN.md):
+  # portal-gateway:
+  #   image: portal-gateway:latest
+  #   ports: ["127.0.0.1:${PORTAL_HOST_PORT}:8080"]
+  #   environment:
+  #     - MONGO_URI=mongodb://mongodb:27017
+  #     - PUBLIC_URL=https://ai.dev.a-b-cloud.de/portal
+  #   depends_on: [mongodb]
