@@ -19,6 +19,10 @@ services:
     restart: always
     depends_on: [mongodb, portal-gateway, code-runner]
     env_file: librechat.env
+    # LibreChat fetches the login configuration from https://<domain>/portal/oidc: go straight to the
+    # server's nginx instead of out to the public address and back
+    extra_hosts:
+      - "${PORTAL_DOMAIN:-ai.dev.a-b-cloud.de}:host-gateway"
     environment:
       - HOST=0.0.0.0
       - MONGO_URI=mongodb://mongodb:27017/LibreChat
