@@ -49,11 +49,21 @@ Das alte Portal läuft weiter bis Schritt 7. Seine Konten und Chats werden **nic
 
 ## 2. Code holen
 
+Portal-Code als Archiv hochladen (ohne GitHub-Zugang auf dem Server), vom eigenen Rechner aus:
+
 ```bash
-# dieses Repository (privat: mit Deploy-Key/Token); Branch, bis er nach main gemergt ist
-git clone --branch ccr-19153869-nd6ntm https://github.com/yorumainvalo0-crypto/Api /opt/portal
+scp portal-deploy.tar.gz root@88.99.138.164:/root/
+```
+
+Auf dem Server:
+
+```bash
+mkdir -p /opt/portal && tar xzf /root/portal-deploy.tar.gz -C /opt/portal
 git clone --depth 1 --branch v0.8.8 https://github.com/danny-avila/LibreChat /opt/LibreChat
 ```
+
+(Alternative mit Git: `git clone --branch ccr-19153869-nd6ntm https://github.com/yorumainvalo0-crypto/Api /opt/portal`
+– privates Repository, braucht Deploy-Key oder Token.)
 
 LibreChat **v0.8.8** ist die getestete Version (Image-Tag in der Override-Datei fest gepinnt).
 
