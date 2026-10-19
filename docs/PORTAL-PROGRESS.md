@@ -28,6 +28,14 @@ MongoDB und Test-Doubles für Anthropic/OpenRouter). Auf dem Hetzner-Server ist 
 
 ## Log
 
+### 19.10.2026 – Erster Start auf dem Server: angepasst an die Hardware
+
+- Server-Docker hat kein BuildKit (buildx) → Dockerfiles bauen jetzt auch mit dem klassischen Builder.
+- Server-CPU hat kein **AVX** → MongoDB 8 startet dort nicht. Umgestellt auf **MongoDB 4.4** (letzte Version ohne
+  AVX-Pflicht, von LibreChat und Gateway unterstützt). Alle 65 Gateway- und 30 Browser-Tests laufen damit grün.
+- `start.sh` läuft ohne root (Docker-Gruppe genügt) und macht vor dem Umschalten einen **Selbsttest**
+  (Code-Ausführung mit numpy/pandas/matplotlib/Office-Bibliotheken und ein 3D-Teil) auf der echten CPU.
+
 ### 19.10.2026 – Ein Ordner, ein Befehl
 
 - Das Portal kommt jetzt als **ein Ordner** `ai-portal-neu` (Archiv zum Hochladen) mit eigener Docker Compose –
