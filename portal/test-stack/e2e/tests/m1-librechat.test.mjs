@@ -3,20 +3,23 @@ import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
 import {
   CREDITS_PER_USD,
-  LIBRECHAT_URL,
-  apiLogin,
+  PUBLIC_URL,
+  USER_EMAIL_DOMAIN,
+  adminLogin,
   clearMockRequests,
+  createUserWithLoginLink,
   launchBrowser,
   librechatScript,
+  loginWithLink,
   mockRequests,
-  passwordLogin,
+  newDevice,
   sendPrompt,
   waitFor,
   withMongo,
 } from '../lib.mjs'
 
-const EMAIL = `m1-${Date.now()}@example.com`
-const PASSWORD = 'Test-Passw0rd-123'
+const USERNAME = `m1user${Date.now() % 100000}`
+const EMAIL = `${USERNAME}@${USER_EMAIL_DOMAIN}`
 // Opus 5.5: $4 / $20 per 1M tokens; the mock reports 1000 input and 500 output tokens
 const EXPECTED_MESSAGE_COST_USD = (1000 * 4 + 500 * 20) / 1_000_000
 
@@ -24,9 +27,13 @@ let browser
 let page
 
 before(async () => {
-  librechatScript('create-user', '--', EMAIL, 'M1 Tester', `m1user${Date.now()}`, PASSWORD, '--email-verified=true')
   browser = await launchBrowser()
-  page = await browser.newPage()
+  const admin = await newDevice(browser)
+  await adminLogin(admin.page)
+  const link = await createUserWithLoginLink(admin.page, USERNAME)
+  await admin.context.close()
+  ;({ page } = await newDevice(browser))
+  await loginWithLink(page, link)
 })
 
 after(async () => {
@@ -34,8 +41,12 @@ after(async () => {
 })
 
 test('startup config exposes only the Claude model specs, Opus 5.5 is the default', async () => {
-  const token = await apiLogin(EMAIL, PASSWORD)
-  const config = await (await fetch(`${LIBRECHAT_URL}/api/config`, { headers: { authorization: `Bearer ${token}` } })).json()
+  // The chat page loads the startup config with the user's token; read the same response
+  const config = await page.evaluate(async () => {
+    const refresh = await fetch('/api/auth/refresh', { method: 'POST', credentials: 'include' })
+    const { token } = await refresh.json()
+    return (await fetch('/api/config', { headers: { authorization: `Bearer ${token}` } })).json()
+  })
   const specs = config.modelSpecs?.list ?? []
   assert.deepEqual(
     specs.map((s) => s.preset.model),
@@ -49,7 +60,6 @@ test('startup config exposes only the Claude model specs, Opus 5.5 is the defaul
 })
 
 test('a new user starts with zero balance and is blocked', async () => {
-  await passwordLogin(page, EMAIL, PASSWORD)
   const balance = await withMongo(async (db) => {
     const user = await db.collection('users').findOne({ email: EMAIL })
     return db.collection('balances').findOne({ user: user._id })
@@ -68,7 +78,7 @@ test('after a top-up the chat uses Opus 5.5 with medium effort and the exact cos
   librechatScript('add-balance', '--', EMAIL, String(1 * CREDITS_PER_USD))
   await clearMockRequests()
 
-  await page.goto(`${LIBRECHAT_URL}/c/new`)
+  await page.goto(`${PUBLIC_URL}/c/new`)
   await sendPrompt(page, 'Sag Hallo')
   await page.getByText('Hallo vom Test-Claude.').first().waitFor({ timeout: 60_000 })
 
@@ -126,7 +136,7 @@ test('chat titles are generated with Haiku 5.5, not the chat model', async () =>
 
 test('users can raise the effort in the parameters panel', async () => {
   await clearMockRequests()
-  await page.goto(`${LIBRECHAT_URL}/c/new`)
+  await page.goto(`${PUBLIC_URL}/c/new`)
   await page.click('[data-testid="nav-panel-parameters"]')
   const slider = page.locator('[role="slider"]').nth(await effortSliderIndex(page))
   await slider.focus()

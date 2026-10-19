@@ -1,0 +1,33 @@
+name: Portal gateway
+
+on:
+  push:
+    branches: ['**']
+    paths: ['portal/**', '.github/workflows/portal.yml']
+  pull_request:
+    paths: ['portal/**', '.github/workflows/portal.yml']
+  workflow_dispatch:
+
+jobs:
+  gateway:
+    runs-on: ubuntu-latest
+    services:
+      mongodb:
+        image: mongo:8.0.20
+        ports: ['27017:27017']
+    defaults:
+      run:
+        working-directory: portal/gateway
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: portal/gateway/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+      - run: npm run build
+      - name: Build Docker image
+        run: docker build -t portal-gateway:ci .

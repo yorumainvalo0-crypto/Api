@@ -53,6 +53,16 @@ function statusLabel(user: PortalUser): SafeHtml {
   return user.status === 'active' ? html`<span class="ok">aktiv</span>` : html`<span class="error">gesperrt</span>`
 }
 
+/** Logs the user out of LibreChat everywhere (its refresh sessions live in the sessions collection). */
+async function endLibrechatSessions(ctx: AppContext, userId: string): Promise<void> {
+  const user = await ctx.db.col.users.findOne({ _id: userId })
+  const librechatUser = user?.librechatUserId
+    ? { _id: user.librechatUserId }
+    : await ctx.db.librechat.collection('users').findOne({ openidId: userId }, { projection: { _id: 1 } })
+  if (librechatUser) await ctx.db.librechat.collection('sessions').deleteMany({ user: librechatUser._id })
+  await ctx.db.col.oidc.deleteMany({ model: 'Session', 'payload.accountId': userId })
+}
+
 export function registerAdminRoutes(app: FastifyInstance, ctx: AppContext): void {
   const { config, db } = ctx
   const base = config.basePath
@@ -253,6 +263,7 @@ export function registerAdminRoutes(app: FastifyInstance, ctx: AppContext): void
       if (req.params.id === session.user._id) return reply.code(400).send('Du kannst dich nicht selbst sperren.')
       await db.col.users.updateOne({ _id: req.params.id }, { $set: { status: 'blocked' } })
       await revokeAllDevices(db, req.params.id)
+      await endLibrechatSessions(ctx, req.params.id)
       await audit(db, session.user.username, 'user.blocked', req.params.id)
       return reply.redirect(`${base}/admin/users/${req.params.id}`)
     }),

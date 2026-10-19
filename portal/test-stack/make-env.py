@@ -1,26 +1,30 @@
 #!/usr/bin/env python3
-"""Build test.env for the local test stack from the production env template.
+"""Build test.env (LibreChat) and gateway.env for the local test stack.
 
-Secrets are generated fresh on every run; the file is git-ignored.
+LibreChat's values come from the production template; secrets are generated fresh on every
+run. Both files are git-ignored.
 """
 import pathlib
 import re
 import secrets
 
 here = pathlib.Path(__file__).parent
-src = (here / "../deploy/env.production.example").read_text()
+PUBLIC_URL = "https://portal.test:8443"
+OIDC_CLIENT_SECRET = secrets.token_hex(16)
+MCP_TOKEN = secrets.token_hex(16)
 
 values = {
     "LIBRECHAT_HOST_PORT": "3080",
     "PORTAL_HOST_PORT": "3090",
-    "DOMAIN_CLIENT": "http://localhost:3080",
-    "DOMAIN_SERVER": "http://localhost:3080",
+    "DOMAIN_CLIENT": PUBLIC_URL,
+    "DOMAIN_SERVER": PUBLIC_URL,
     "ANTHROPIC_API_KEY": "sk-ant-test",
     "OPENROUTER_KEY": "sk-or-test",
     "LIBRECHAT_CODE_API_KEY": "test",
-    "OPENID_CLIENT_SECRET": "test-client-secret",
+    "OPENID_ISSUER": f"{PUBLIC_URL}/portal/oidc",
+    "OPENID_CLIENT_SECRET": OIDC_CLIENT_SECRET,
     "OPENID_SESSION_SECRET": secrets.token_hex(32),
-    "PORTAL_MCP_TOKEN": "test-mcp-token",
+    "PORTAL_MCP_TOKEN": MCP_TOKEN,
     "CREDS_KEY": secrets.token_hex(32),
     "CREDS_IV": secrets.token_hex(16),
     "JWT_SECRET": secrets.token_hex(32),
@@ -30,19 +34,8 @@ values = {
     "UID": "0",
     "GID": "0",
 }
-# Login mode: "password" until the gateway exists, "oidc" afterwards
-mode = (here / "login-mode").read_text().strip() if (here / "login-mode").exists() else "password"
-if mode == "password":
-    values.update(
-        {
-            "ALLOW_EMAIL_LOGIN": "true",
-            "ALLOW_SOCIAL_LOGIN": "false",
-            "OPENID_AUTO_REDIRECT": "false",
-            "OPENID_ISSUER": "",
-            "OPENID_CLIENT_ID": "",
-        }
-    )
 
+src = (here / "../deploy/env.production.example").read_text()
 lines = []
 for line in src.splitlines():
     m = re.match(r"^([A-Z_]+)=(.*)$", line)
@@ -59,4 +52,17 @@ lines += [
     "REGISTER_MAX=1000",
 ]
 (here / "test.env").write_text("\n".join(lines) + "\n")
-print(f"wrote test.env (login mode: {mode})")
+
+gateway = {
+    "PUBLIC_URL": PUBLIC_URL,
+    "MONGO_URI": "mongodb://mongodb:27017",
+    "PORTAL_SECRET": secrets.token_hex(32),
+    "OIDC_CLIENT_SECRET": OIDC_CLIENT_SECRET,
+    "PORTAL_MCP_TOKEN": MCP_TOKEN,
+    "PORTAL_ADMIN_USERNAME": "chef",
+    "PORTAL_ADMIN_PASSWORD": "test-admin-password",
+    "USER_EMAIL_DOMAIN": "users.portal.test",
+    "COOKIE_SECURE": "true",
+}
+(here / "gateway.env").write_text("".join(f"{k}={v}\n" for k, v in gateway.items()))
+print("wrote test.env and gateway.env")

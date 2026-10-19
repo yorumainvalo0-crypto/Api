@@ -136,9 +136,11 @@ export async function createProvider(config: Config, db: Database, librechatCall
       }
     },
     ttl: {
-      Session: config.DEVICE_SESSION_DAYS * 86_400,
+      // The device session (portal_sid) is the source of truth: the provider's own session only
+      // lives long enough for one login, so every LibreChat re-login checks the device again
+      Session: 600,
       Interaction: 3_600,
-      Grant: config.DEVICE_SESSION_DAYS * 86_400,
+      Grant: 600,
       AuthorizationCode: 60,
       AccessToken: 3_600,
       IdToken: 3_600,
