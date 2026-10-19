@@ -11,3 +11,8 @@ coverage/
 
 # Temporary agent worktrees
 .claude/worktrees/
+
+# Portal test stack
+portal/test-stack/test.env
+portal/test-stack/data/
+portal/**/node_modules/

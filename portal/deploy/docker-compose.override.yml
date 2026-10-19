@@ -4,8 +4,8 @@
 
 services:
   api:
-    # Numbered release instead of the dev image; pin a concrete tag once tested.
-    image: registry.librechat.ai/librechat-ai/librechat:latest
+    # Pinned to the version tested in portal/test-stack; update only after re-running the tests
+    image: registry.librechat.ai/librechat-ai/librechat:v0.8.8
     # Docker publishes ports past ufw, so bind to localhost only; nginx proxies to it.
     ports: !override
       - "127.0.0.1:${LIBRECHAT_HOST_PORT:?set LIBRECHAT_HOST_PORT in .env}:3080"

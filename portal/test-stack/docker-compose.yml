@@ -1,0 +1,45 @@
+# Local test stack: LibreChat with the production config, MongoDB and API test doubles.
+# Usage: python3 make-env.py && docker compose up -d
+name: portal-test
+
+services:
+  mongodb:
+    image: mirror.gcr.io/library/mongo:8.0.20
+    command: mongod --noauth
+    ports:
+      - "127.0.0.1:27017:27017"
+    volumes:
+      - ./data/mongo:/data/db
+
+  mocks:
+    image: mirror.gcr.io/library/node:22-alpine
+    working_dir: /mocks
+    command: node server.mjs
+    volumes:
+      - ./mocks:/mocks:ro
+    ports:
+      - "127.0.0.1:8089:8080"
+    networks:
+      default:
+        # Stands in for the gateway's MCP endpoint until the real gateway runs
+        aliases: [portal-gateway]
+
+  api:
+    image: registry.librechat.ai/librechat-ai/librechat:v0.8.8
+    depends_on: [mongodb, mocks]
+    env_file: test.env
+    environment:
+      - HOST=0.0.0.0
+      - MONGO_URI=mongodb://mongodb:27017/LibreChat
+    ports:
+      - "127.0.0.1:3080:3080"
+    volumes:
+      - type: bind
+        source: ./test.env
+        target: /app/.env
+      - type: bind
+        source: ../deploy/librechat.yaml
+        target: /app/librechat.yaml
+      - ./data/uploads:/app/uploads
+      - ./data/images:/app/client/public/images
+      - ./data/logs:/app/logs

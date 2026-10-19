@@ -19,13 +19,11 @@ interface:
     modalAcceptance: true
     modalTitle: "Nutzungsbedingungen"
     modalContent: |
-      Dieses Portal nutzt die Anthropic API (Chat) und OpenRouter (Bild, Sprache, Video). Deine
-      Eingaben und hochgeladenen Dateien werden zur Verarbeitung an diese Anbieter übertragen.
+      Dieses Portal nutzt die Anthropic API (Chat) und OpenRouter (Bild, Sprache, Video). Deine Eingaben und hochgeladenen Dateien werden zur Verarbeitung an diese Anbieter übertragen.
 
       - Es gilt die Usage Policy von Anthropic: https://www.anthropic.com/legal/aup
       - Keine vertraulichen Kundendaten oder Passwörter eingeben.
-      - Jeder Account hat ein Budget in US-Dollar; ist es aufgebraucht, sind bis zur
-        nächsten Aufladung keine Anfragen möglich.
+      - Jeder Account hat ein Budget in US-Dollar; ist es aufgebraucht, sind bis zur nächsten Aufladung keine Anfragen möglich.
 
 registration:
   socialLogins: ["openid"]
@@ -39,6 +37,10 @@ balance:
   display: "currency"
 
 endpoints:
+  anthropic:
+    # Chat titles with the cheapest model instead of the chat model
+    titleConvo: true
+    titleModel: "claude-haiku-5-5"
   agents:
     capabilities: ["execute_code", "skills", "artifacts", "tools", "context", "ocr"]
   # OpenRouter chat models: hidden for now. To enable, uncomment and add ",custom" to ENDPOINTS.
@@ -56,38 +58,53 @@ endpoints:
   #     modelDisplayLabel: "OpenRouter"
 
 # Default: Claude Opus 5.5 with medium effort; users may switch model and effort.
-# The agent_id values come from agents created once in the UI (milestone M1/M2).
+# Each spec turns on the tools directly (code execution for file output, skills, artifacts,
+# the portal MCP server for media/CAD), so no pre-created agents are needed.
 modelSpecs:
   enforce: false
   prioritize: true
   list:
     - name: "opus-5-5"
       label: "Claude Opus 5.5"
-      description: "Standard – mit Dateien, Bildern und Code"
+      description: "Standard – stärkstes Modell"
       default: true
-      preset:
-        endpoint: "agents"
-        agent_id: "REPLACE_WITH_OPUS_AGENT_ID"
-    - name: "sonnet-5-5"
-      label: "Claude Sonnet 5.5"
-      description: "Schneller und günstiger"
-      preset:
-        endpoint: "agents"
-        agent_id: "REPLACE_WITH_SONNET_AGENT_ID"
-    - name: "haiku-5-5"
-      label: "Claude Haiku 5.5"
-      description: "Sehr günstig für einfache Aufgaben"
-      preset:
-        endpoint: "agents"
-        agent_id: "REPLACE_WITH_HAIKU_AGENT_ID"
-    - name: "opus-5-5-plain"
-      label: "Claude Opus 5.5 (ohne Werkzeuge)"
+      executeCode: true
+      skills: true
+      artifacts: true
+      mcpServers: ["portal"]
       preset:
         endpoint: "anthropic"
         model: "claude-opus-5-5"
         effort: "medium"
+    - name: "sonnet-5-5"
+      label: "Claude Sonnet 5.5"
+      description: "Schneller und günstiger"
+      executeCode: true
+      skills: true
+      artifacts: true
+      mcpServers: ["portal"]
+      preset:
+        endpoint: "anthropic"
+        model: "claude-sonnet-5-5"
+        effort: "medium"
+    - name: "haiku-5-5"
+      label: "Claude Haiku 5.5"
+      description: "Sehr günstig für einfache Aufgaben"
+      executeCode: true
+      skills: true
+      artifacts: true
+      mcpServers: ["portal"]
+      preset:
+        endpoint: "anthropic"
+        model: "claude-haiku-5-5"
+        effort: "medium"
 
 # Media tools (image, speech, video via OpenRouter, M7) and CAD tools (3D parts, M7b) served by the portal gateway
+# Internal MCP servers are blocked by default (SSRF protection); allow only the gateway
+mcpSettings:
+  allowedAddresses:
+    - "portal-gateway:8080"
+
 mcpServers:
   portal:
     type: streamable-http

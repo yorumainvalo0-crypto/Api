@@ -97,8 +97,12 @@ generieren und **technische 3D-Modelle (3D-Druck/CAD) mit 3D-Vorschau** erstelle
 - **Effort:** Regler im Parameter-Panel und „Thinking“-Auswahl pro Nachricht
   (`low` · `medium` · `high` · `xhigh` · `max`). LibreChat sendet ihn als `output_config.effort`.
   Bei Opus 5.5 ist Thinking immer an; Effort steuert Tiefe **und** Kosten.
-- ⚠ Im PoC prüfen: Effort-Auswahl pro Nachricht bei **Agent**-Specs. Fallback: je Modell zusätzliche
-  Specs „… (high)“, „… (max)“.
+- ✅ Getestet (M1): Specs nutzen das `anthropic`-Endpoint und schalten die Werkzeuge direkt ein
+  (`executeCode`, `skills`, `artifacts`, `mcpServers`) – keine vorab angelegten Agenten nötig.
+  Effort-Regler im Parameter-Panel funktioniert (Medium → High kommt bei Claude an).
+- Chat-Titel werden mit Haiku 5.5 erzeugt (spart Kosten).
+- ⚠ Websuche (Anthropic-Werkzeug) wird von LibreChat **nicht** vom Guthaben abgebucht → bis zur
+  Entscheidung in der Anthropic Console abschalten.
 
 ### 4.4 Login nur über das Gateway
 
@@ -315,6 +319,8 @@ Tokens (Einladung, Login) sind 128 Bit zufällig und werden **nur gehasht** gesp
   Restore-Test vor Go-live.
 - **Updates:** LibreChat-Image-Tag pinnen, monatlich auf Testinstanz prüfen, dann aktualisieren.
 - **Monitoring:** Uptime-Check, Gateway-Health `/portal/health`, Warnung wenn Tageskosten > Schwelle.
+- ⚠ **Gateway = kritischer Dienst:** Ist der MCP-Server nicht erreichbar, lehnt LibreChat alle Chats ab
+  (in M1 getestet). Daher `restart: always`, Health-Check und Alarm.
 - **Recht:** Hinweis-Modal (Daten gehen an Anthropic/OpenRouter), Anthropic-DPA, Hetzner-AVV,
   Impressum/Datenschutz verlinkt.
 

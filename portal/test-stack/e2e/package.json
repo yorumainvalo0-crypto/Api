@@ -1,0 +1,12 @@
+{
+  "name": "portal-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test --test-concurrency=1 --test-reporter=spec tests/*.test.mjs"
+  },
+  "dependencies": {
+    "mongodb": "6.20.0",
+    "playwright-core": "1.56.1"
+  }
+}
