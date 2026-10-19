@@ -1,0 +1,19 @@
+# Copy into the LibreChat checkout next to docker-compose.yml.
+# Requires Docker Compose v2.24+ (for the !override tag).
+
+services:
+  api:
+    # Numbered release instead of the dev image; pin a concrete tag once tested.
+    image: registry.librechat.ai/librechat-ai/librechat:latest
+    # Docker publishes ports past ufw, so bind to localhost only; nginx proxies to it.
+    ports: !override
+      - "127.0.0.1:3080:3080"
+    volumes:
+      - type: bind
+        source: ./librechat.yaml
+        target: /app/librechat.yaml
+
+  admin-panel:
+    # Not public: reach it through an SSH tunnel (ssh -L 3000:127.0.0.1:3000 <server>).
+    ports: !override
+      - "127.0.0.1:3000:3000"

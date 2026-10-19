@@ -1,196 +1,154 @@
-# Plan: Claude-Weboberfläche auf Hetzner (LibreChat)
+# Plan: LibreChat ersetzt das A-B Cloud AI Portal (ai.dev.a-b-cloud.de)
 
-Ziel: Eine eigene, Claude.ai-ähnliche Website auf einem Hetzner-Server, über die ein kleiner
-Kreis (Team/Freunde, bis ca. 20 Personen) Claude über die **Anthropic API** nutzt – mit
-Accounts, Datei-Upload und Budget-Limits pro Person. Kostenlos für die Nutzer, der Admin
-vergibt die Budgets.
+Ziel: Das bestehende **A-B Cloud AI Portal** auf `ai.dev.a-b-cloud.de` wird durch **LibreChat**
+ersetzt – eine Claude.ai-ähnliche Oberfläche über die **Anthropic API**, mit Accounts,
+Datei-Upload und Budget-Limits pro Person. Zielgruppe: Team/Freunde (bis ca. 20 Personen),
+kostenlos, der Admin vergibt die Budgets.
 
-Entscheidung: **LibreChat** (Open Source, MIT) statt Eigenentwicklung. Es bringt Chat-UI,
-Accounts, Datei-Upload, Token-Guthaben pro User und Rate-Limits bereits mit.
+Fertige Konfiguration: [`deploy/librechat/`](../deploy/librechat/)
+
+| Datei                                   | Zweck                                                     |
+| --------------------------------------- | --------------------------------------------------------- |
+| `env.production.example`                | Werte für LibreChats `.env` (Domain, Claude-Key, Limits)  |
+| `librechat.yaml`                        | Guthaben pro User, Datei-Limits, Nutzungsbedingungen      |
+| `docker-compose.override.yml`           | Ports nur auf `127.0.0.1`, Config einbinden               |
+| `nginx/ai.dev.a-b-cloud.de.conf`        | Reverse Proxy 443 → `127.0.0.1:3080`, Streaming, Uploads  |
+| `scripts/backup.sh`                     | Tägliches Backup (MongoDB + Uploads + Config)             |
 
 ---
 
-## 1. Architektur
+## 1. Ist-Zustand (geprüft am 19.10.2026)
+
+- `ai.dev.a-b-cloud.de` → **88.99.138.164** (Hetzner).
+- **nginx** auf Port **443** (HTTPS, HTTP/2), Port **80** leitet per 301 auf HTTPS um.
+- Dahinter: „A-B Cloud AI Portal“ (React-SPA + eigene API: Login, Benutzerverwaltung,
+  API-Keys/Credits, Chats, Bild-/Sprach-/Video-Generierung).
+- Interner Port der alten App: von außen nicht sichtbar → auf dem Server prüfen (Phase 0).
+
+## 2. Ziel-Architektur
 
 ```
-Browser ──HTTPS──▶ Caddy (TLS, Let's Encrypt)
-                     │
-                     ▼
-                 LibreChat API + UI ──▶ Anthropic API (Claude)
-                     │
-          ┌──────────┼───────────┐
-          ▼          ▼           ▼
-       MongoDB   Meilisearch   RAG-API + pgvector (optional, für Dokumentsuche)
+Browser ──443──▶ nginx (bestehend, Let's Encrypt)
+                   │  proxy_pass 127.0.0.1:3080
+                   ▼
+               LibreChat (Docker) ──▶ Anthropic API
+                   │
+       ┌───────────┼────────────┬──────────────────────┐
+       ▼           ▼            ▼                      ▼
+    MongoDB    Meilisearch   Admin-Panel          RAG-API + pgvector
+                             (127.0.0.1:3000,     (optional, braucht
+                              nur per SSH-Tunnel)  Embedding-Anbieter)
 ```
 
-Alles läuft per **Docker Compose** auf einem Server.
-
-## 2. Voraussetzungen
-
-| Was                | Details                                                                                          |
-| ------------------ | ------------------------------------------------------------------------------------------------ |
-| Hetzner Cloud      | Ubuntu 24.04, 2–4 vCPU, 4–8 GB RAM, 40+ GB SSD (ohne RAG reichen 4 GB), Standort DE, Backups an |
-| Domain             | z. B. `chat.example.de`, A-/AAAA-Record auf die Server-IP                                        |
-| Anthropic Console  | API-Key in eigenem Workspace, **monatliches Ausgabelimit** im Workspace setzen                    |
-| SMTP (optional)    | Für Passwort-Reset und Einladungen per Mail                                                      |
+Wichtig: Docker umgeht `ufw`. Deshalb bindet `docker-compose.override.yml` alle Ports an
+`127.0.0.1` – öffentlich ist nur nginx.
 
 ## 3. Phasen
 
-### Phase 1 – Server absichern (≈ 1 h)
-
-- Server mit SSH-Key anlegen, Passwort-Login aus (`PasswordAuthentication no`).
-- Hetzner-Firewall: nur 22, 80, 443 eingehend (22 idealerweise nur von eigener IP).
-- `ufw`, `fail2ban`, `unattended-upgrades` installieren.
-- Nicht-root-User mit `sudo`, Docker + Compose-Plugin installieren.
-
-### Phase 2 – LibreChat installieren (≈ 1–2 h)
+### Phase 0 – Bestandsaufnahme & Backup der alten App (≈ 30 min)
 
 ```bash
-git clone https://github.com/danny-avila/LibreChat.git
-cd LibreChat
-cp .env.example .env
-cp librechat.example.yaml librechat.yaml
+sudo ss -tlnp                                   # which process listens on which port
+grep -R "proxy_pass" /etc/nginx/sites-enabled/  # where nginx sends ai.dev.a-b-cloud.de
+docker ps; systemctl list-units --type=service | grep -iE "node|pm2|portal"
 ```
 
-`.env` – wichtigste Werte:
+- Alte App, deren Datenbank und die nginx-Site-Datei sichern (für Rollback).
+- Benutzerliste der alten App exportieren (Namen/E-Mails) – Passwörter lassen sich nicht
+  übernehmen, die Accounts werden in LibreChat neu angelegt.
+- Prüfen, ob Ports **3000** oder **3080** schon belegt sind (sonst in der Override-Datei ändern).
 
-```ini
-DOMAIN_CLIENT=https://chat.example.de
-DOMAIN_SERVER=https://chat.example.de
+### Phase 1 – Server-Basis (≈ 30 min, falls noch nicht vorhanden)
 
-# Only Claude: hide the other providers
-ENDPOINTS=anthropic
-ANTHROPIC_API_KEY=sk-ant-...
-ANTHROPIC_MODELS=claude-sonnet-5-5,claude-opus-5-5,claude-haiku-5-5
+- SSH nur mit Key, Hetzner-Firewall: 22 (eigene IP), 80, 443.
+- `fail2ban`, `unattended-upgrades`, Docker + Compose-Plugin (≥ v2.24).
+- Anthropic Console: eigener Workspace, API-Key, **monatliches Ausgabelimit** setzen.
 
-# No public sign-up; the admin creates accounts
-ALLOW_REGISTRATION=false
-ALLOW_SOCIAL_REGISTRATION=false
-
-# Generate fresh secrets (LibreChat offers a credentials generator)
-CREDS_KEY=...
-CREDS_IV=...
-JWT_SECRET=...
-JWT_REFRESH_SECRET=...
-MEILI_MASTER_KEY=...
-
-# Per-user message rate limit
-LIMIT_MESSAGE_USER=true
-MESSAGE_USER_MAX=40
-MESSAGE_USER_WINDOW=1
-```
-
-Start: `docker compose -f deploy-compose.yml up -d` (Produktions-Compose von LibreChat).
-
-### Phase 3 – HTTPS mit Caddy (≈ 30 min)
-
-`Caddyfile`:
-
-```
-chat.example.de {
-    encode gzip
-    reverse_proxy localhost:3080
-}
-```
-
-Caddy holt das Let's-Encrypt-Zertifikat automatisch. Den Nginx-Container aus
-`deploy-compose.yml` dann weglassen (oder stattdessen den mitgelieferten Nginx nutzen –
-nur einer von beiden).
-
-### Phase 4 – Limits pro Person (≈ 1 h)
-
-`librechat.yaml`:
-
-```yaml
-balance:
-  enabled: true
-  startBalance: 5000000 # 1,000,000 credits = 1 USD -> 5 USD for new users
-  autoRefillEnabled: true
-  refillIntervalValue: 30
-  refillIntervalUnit: "days"
-  refillAmount: 5000000 # 5 USD per month
-```
-
-Admin-Befehle (deploy-compose):
+### Phase 2 – LibreChat parallel aufsetzen (≈ 1 h)
 
 ```bash
-# Create a user (works even with registration disabled)
-docker exec -it LibreChat-API /bin/sh -c "cd .. && npm run create-user"
-# Top up / overwrite / list balances
-docker exec -it LibreChat-API /bin/sh -c "cd .. && npm run add-balance user@example.de 2000000"
-docker exec -it LibreChat-API /bin/sh -c "cd .. && npm run set-balance user@example.de 10000000"
-docker exec -it LibreChat-API /bin/sh -c "cd .. && npm run list-balances"
+sudo git clone https://github.com/danny-avila/LibreChat.git /opt/LibreChat
+sudo chown -R $USER: /opt/LibreChat && cd /opt/LibreChat
+cp .env.example .env            # then set the values from env.production.example
+cp <repo>/deploy/librechat/librechat.yaml .
+cp <repo>/deploy/librechat/docker-compose.override.yml .
+cp <repo>/deploy/librechat/scripts/backup.sh . && chmod +x backup.sh
+docker compose up -d
+curl -I http://127.0.0.1:3080   # must answer before nginx is switched
 ```
 
-Drei Ebenen schützen das Budget:
+Die alte App läuft in dieser Phase noch weiter.
 
-1. **Guthaben pro User** (LibreChat-Balance) – leer = keine weiteren Anfragen.
-2. **Rate-Limit pro User** (`MESSAGE_USER_*`) – gegen Spam/Endlosschleifen.
-3. **Workspace-Limit in der Anthropic Console** – harte Obergrenze für alle zusammen.
+### Phase 3 – Umschalten (≈ 15 min, kurze Downtime)
 
-### Phase 5 – Datei-Upload (≈ 1–2 h)
-
-- Bilder und PDFs gehen direkt an Claude (Claude liest sie nativ) – das funktioniert ohne Zusatzdienst.
-- Limits in `librechat.yaml`:
-
-```yaml
-fileConfig:
-  endpoints:
-    anthropic:
-      fileLimit: 10 # files per message
-      fileSizeLimit: 20 # MB per file
-      totalSizeLimit: 50 # MB per message
-  serverFileSizeLimit: 50
+```bash
+sudo cp /etc/nginx/sites-available/ai.dev.a-b-cloud.de{,.old-portal}
+sudo cp <repo>/deploy/librechat/nginx/ai.dev.a-b-cloud.de.conf /etc/nginx/sites-available/ai.dev.a-b-cloud.de
+sudo nginx -t && sudo systemctl reload nginx
+# then stop the old app (docker stop / systemctl stop / pm2 stop)
 ```
 
-- **Optional RAG** (Suche über viele/große Dokumente): RAG-API + pgvector sind in der
-  Compose-Datei enthalten, brauchen aber einen **Embedding-Anbieter** (Anthropic bietet keine
-  Embeddings). Optionen: OpenAI-Key, Voyage AI oder lokal über Ollama (mehr RAM nötig).
-  → Erst ohne RAG starten, bei Bedarf nachrüsten.
+Zertifikatspfade aus der alten Site-Datei übernehmen, falls sie abweichen.
+**Rollback:** `.old-portal`-Datei zurückkopieren, `nginx -s reload`, alte App starten.
 
-### Phase 6 – Betrieb (≈ 1 h einrichten)
+### Phase 4 – Accounts & Limits (≈ 30 min)
 
-- **Backups:** Hetzner-Server-Backups + täglicher `mongodump` per Cron (Chats, Accounts, Guthaben)
-  und das Upload-Verzeichnis sichern; Kopie in eine Hetzner Storage Box.
-- **Updates:** monatlich `git pull && docker compose -f deploy-compose.yml pull && ... up -d`;
-  vorher Backup, Release-Notes lesen.
-- **Monitoring:** Uptime-Check (z. B. Uptime Kuma), Kosten in der Anthropic Console wöchentlich prüfen.
-- **Admin:** Bekanntgabe von Änderungen und Hinweisen über die LibreChat-Einstellungen
-  (Willkommensnachricht, Nutzungsbedingungen-Modal in `librechat.yaml` → `interface`).
+```bash
+cd /opt/LibreChat
+docker compose exec api npm run create-user                         # per person
+docker compose exec api npm run set-balance user@example.de 10000000 # 10 USD
+docker compose exec api npm run list-balances
+```
+
+- Den ersten Account als Admin anlegen. Admin-Panel per Tunnel:
+  `ssh -L 3000:127.0.0.1:3000 <server>` → `http://localhost:3000`.
+- Drei Schutzebenen fürs Budget:
+  1. **Guthaben pro User** (`balance`: 5 USD Start, monatlich zurückgesetzt auf 5 USD)
+  2. **Rate-Limit pro User** (`MESSAGE_USER_MAX=40` pro Minute)
+  3. **Workspace-Limit** in der Anthropic Console (harte Obergrenze für alle)
+
+### Phase 5 – Datei-Upload testen (≈ 30 min)
+
+- Bilder und PDFs gehen direkt an Claude (bis 10 Dateien, 20 MB je Datei, 50 MB je Nachricht).
+- **Optional RAG** (Suche über viele große Dokumente): braucht einen Embedding-Anbieter
+  (OpenAI, Voyage AI oder lokal Ollama), danach `interface.fileSearch: true`.
+
+### Phase 6 – Betrieb
+
+- **Backup:** Cron `30 3 * * * /opt/LibreChat/backup.sh`; Backups zusätzlich in eine
+  Hetzner Storage Box kopieren; Restore einmal testen (`mongorestore --archive --gzip`).
+- **Updates:** monatlich Backup → `git pull && docker compose pull && docker compose up -d`.
+  Nach dem ersten erfolgreichen Test den Image-Tag in der Override-Datei fest pinnen.
+- **Monitoring:** Uptime-Check auf `https://ai.dev.a-b-cloud.de`, Kosten wöchentlich in der
+  Anthropic Console prüfen.
 
 ### Phase 7 – Recht & Datenschutz
 
-- Auch bei privatem Kreis: Nutzer informieren, dass Inhalte an Anthropic (USA) gehen.
-- Anthropic-DPA (Commercial Terms) und Hetzner-AVV abschließen bzw. akzeptieren.
-- Bei öffentlich erreichbarer Seite: Impressum + Datenschutzerklärung.
-- Usage Policy von Anthropic gilt für alle Nutzer – in den Nutzungsbedingungen verlinken.
+- Nutzer informieren, dass Inhalte an Anthropic (USA) gehen (Modal in `librechat.yaml`).
+- Anthropic-DPA (Commercial Terms) und Hetzner-AVV.
+- Bei öffentlich erreichbarer Seite: Impressum + Datenschutzerklärung verlinken
+  (`interface.privacyPolicy` in `librechat.yaml`).
 
-## 4. Kosten (grob)
+## 4. Was wegfällt
 
-| Posten           | Kosten                                                    |
-| ---------------- | --------------------------------------------------------- |
-| Hetzner Cloud    | ca. 5–15 €/Monat je nach Größe, + ~20 % für Backups       |
-| Domain           | ca. 1 €/Monat                                             |
-| Anthropic API    | nutzungsabhängig – gedeckelt durch Budgets und Workspace-Limit |
+Die alte App hatte Bild-, Sprach- und Video-Generierung. LibreChat mit nur Claude kann das
+nicht (Claude erzeugt keine Bilder/Videos). Falls benötigt: später einen weiteren Anbieter
+(z. B. OpenRouter) als Endpoint ergänzen.
 
 ## 5. Checkliste
 
-- [ ] Hetzner-Server + Firewall + SSH-Key
-- [ ] Domain auf Server-IP
+- [ ] Phase 0: Ports, alte App, nginx-Site gesichert; Benutzerliste exportiert
 - [ ] Anthropic-Workspace, API-Key, Ausgabelimit
-- [ ] LibreChat mit `.env` + `librechat.yaml`
-- [ ] Caddy/HTTPS
-- [ ] Balance + Rate-Limits aktiv, Test mit leerem Guthaben
-- [ ] Datei-Upload testen (Bild, PDF, Textdatei)
-- [ ] Accounts anlegen, Startguthaben prüfen
-- [ ] Backups + Restore einmal testen
-- [ ] Datenschutzhinweis / Nutzungsbedingungen
-
-**Gesamtaufwand:** etwa 1 Arbeitstag bis zum ersten Login, plus optional RAG.
+- [ ] `.env` mit eigenen Secrets, `librechat.yaml`, Override-Datei
+- [ ] LibreChat antwortet auf `127.0.0.1:3080`
+- [ ] nginx umgestellt, `nginx -t` ok, alte App gestoppt
+- [ ] Ports 3000/3080 von außen **nicht** erreichbar
+- [ ] Admin-Account + Nutzer angelegt, Guthaben geprüft, Test mit leerem Guthaben
+- [ ] Upload getestet (Bild, PDF, Textdatei)
+- [ ] Backup-Cron aktiv, Restore getestet
 
 ## 6. Offene Punkte
 
-- Domain/Subdomain festlegen.
-- Budget pro Person (Vorschlag: 5 USD/Monat) und Modell-Auswahl (Opus nur für bestimmte Nutzer?).
-- RAG ja/nein – und wenn ja, welcher Embedding-Anbieter.
-- SMTP für Passwort-Reset gewünscht?
+- Budget pro Person (Vorschlag: 5 USD/Monat) – Opus für alle oder nur einzelne?
+- RAG ja/nein und Embedding-Anbieter.
+- SMTP für Passwort-Reset.

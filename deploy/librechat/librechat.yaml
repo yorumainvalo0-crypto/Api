@@ -1,0 +1,43 @@
+# LibreChat config for ai.dev.a-b-cloud.de
+# Reference: https://www.librechat.ai/docs/configuration/librechat_yaml
+version: 1.3.17
+cache: true
+
+interface:
+  customWelcome: "Willkommen im A-B Cloud AI Portal"
+  # Enable once a RAG embeddings provider is configured
+  fileSearch: false
+  termsOfService:
+    modalAcceptance: true
+    modalTitle: "Nutzungsbedingungen"
+    modalContent: |
+      Dieses Portal nutzt die Anthropic API. Deine Eingaben und hochgeladenen Dateien
+      werden zur Verarbeitung an Anthropic (USA) übertragen.
+
+      - Es gilt die Usage Policy von Anthropic: https://www.anthropic.com/legal/aup
+      - Keine vertraulichen Kundendaten oder Passwörter eingeben.
+      - Jeder Account hat ein monatliches Budget; ist es aufgebraucht, sind bis zur
+        nächsten Aufladung keine Anfragen möglich.
+
+registration:
+  socialLogins: []
+
+# 1,000,000 credits = 1 USD
+balance:
+  enabled: true
+  startBalance: 5000000
+  autoRefillEnabled: true
+  refillIntervalValue: 30
+  refillIntervalUnit: "days"
+  refillAmount: 5000000
+  # Monthly allowance without rollover
+  refillMode: "reset"
+
+fileConfig:
+  endpoints:
+    anthropic:
+      fileLimit: 10
+      fileSizeLimit: 20
+      totalSizeLimit: 50
+  serverFileSizeLimit: 50
+  avatarSizeLimit: 2
