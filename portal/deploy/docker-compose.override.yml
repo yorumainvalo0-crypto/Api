@@ -1,6 +1,7 @@
 # Copy into the LibreChat checkout (/opt/LibreChat) next to docker-compose.yml.
-# Requires Docker Compose v2.24+ (for the !override tag).
-# Ports come from .env: LIBRECHAT_HOST_PORT (given by the admin) and PORTAL_HOST_PORT.
+# Requires Docker Compose v2.24+ (for the !override/!reset tags).
+# Like the old portal, only portal-nginx is published: 127.0.0.1:PORTAL_HTTP_PORT (45012), where the
+# server's nginx (TLS on 443) already forwards ai.dev.a-b-cloud.de to.
 # Images portal-gateway, portal-code-runner and portal-sandbox are built from this repository
 # with portal/deploy/scripts/build-images.sh.
 
@@ -8,9 +9,8 @@ services:
   api:
     # Pinned to the version tested in portal/test-stack; update only after re-running the tests
     image: registry.librechat.ai/librechat-ai/librechat:v0.8.8
-    # Docker publishes ports past ufw, so bind to localhost only; nginx proxies to it
-    ports: !override
-      - "127.0.0.1:${LIBRECHAT_HOST_PORT:?set LIBRECHAT_HOST_PORT in .env}:3080"
+    # Reached only through portal-nginx
+    ports: !reset []
     depends_on:
       - mongodb
       - portal-gateway
@@ -38,8 +38,21 @@ services:
     volumes:
       # Generated images, audio and videos (uid 1000 must be able to write)
       - /opt/portal-data/media:/data/media
+
+  # Entry point: splits the traffic from the server's nginx between LibreChat and the gateway.
+  # Docker publishes ports past ufw, so bind to localhost only.
+  portal-nginx:
+    image: nginx:1.27-alpine
+    restart: always
+    depends_on:
+      - api
+      - portal-gateway
+    environment:
+      - PUBLIC_HOST=${PORTAL_DOMAIN:-ai.dev.a-b-cloud.de}
+    volumes:
+      - ./portal-nginx/portal.conf.template:/etc/nginx/templates/default.conf.template:ro
     ports:
-      - "127.0.0.1:${PORTAL_HOST_PORT:?set PORTAL_HOST_PORT in .env}:8080"
+      - "127.0.0.1:${PORTAL_HTTP_PORT:-45012}:80"
 
   # Code execution and file output (LibreChat Code API). Starts one network-less sandbox
   # container per execution through the Docker socket; never publish its port.

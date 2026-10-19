@@ -1,0 +1,62 @@
+# nginx inside the compose stack (service portal-nginx), like the old portal's own nginx:
+# the server's nginx terminates TLS for ai.dev.a-b-cloud.de and forwards plain HTTP to
+# 127.0.0.1:${PORTAL_HTTP_PORT}. This container splits that traffic between LibreChat and the gateway.
+# ${PUBLIC_HOST} is filled in by the nginx image's entrypoint (envsubst); $variables stay nginx variables.
+
+# Real client address: exactly one proxy (the server's nginx, reached through the Docker bridge)
+# appends it as the last X-Forwarded-For entry; anything before it was sent by the client and is ignored
+set_real_ip_from 127.0.0.1;
+set_real_ip_from 10.0.0.0/8;
+set_real_ip_from 172.16.0.0/12;
+set_real_ip_from 192.168.0.0/16;
+real_ip_header X-Forwarded-For;
+real_ip_recursive off;
+
+# Docker's DNS; variables in proxy_pass make nginx resolve per request, so restarted
+# containers with new addresses are found
+resolver 127.0.0.11 valid=10s ipv6=off;
+
+server {
+    listen 80;
+    server_name _;
+
+    # Must cover fileConfig.serverFileSizeLimit
+    client_max_body_size 60M;
+
+    # Tool endpoint for LibreChat only (inside the Docker network)
+    location = /portal/mcp {
+        return 404;
+    }
+
+    location /portal/ {
+        set $gateway portal-gateway:8080;
+        proxy_pass http://$gateway;
+        proxy_http_version 1.1;
+        # The public site is always https; upstreams build URLs and secure cookies from these
+        proxy_set_header Host ${PUBLIC_HOST};
+        proxy_set_header X-Forwarded-Host ${PUBLIC_HOST};
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+    }
+
+    location / {
+        set $librechat api:3080;
+        proxy_pass http://$librechat;
+        proxy_http_version 1.1;
+        # The public site is always https; upstreams build URLs and secure cookies from these
+        proxy_set_header Host ${PUBLIC_HOST};
+        proxy_set_header X-Forwarded-Host ${PUBLIC_HOST};
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $remote_addr;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection "upgrade";
+
+        # Streamed responses (SSE): no buffering, long timeouts
+        proxy_buffering off;
+        proxy_cache off;
+        proxy_read_timeout 600s;
+        proxy_send_timeout 600s;
+    }
+}

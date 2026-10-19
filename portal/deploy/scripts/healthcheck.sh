@@ -8,7 +8,7 @@ DOMAIN="${DOMAIN:-ai.dev.a-b-cloud.de}"
 LIBRECHAT_DIR="${LIBRECHAT_DIR:-/opt/LibreChat}"
 ALERT_URL="${ALERT_URL:-}"
 STATE_FILE="${STATE_FILE:-/var/tmp/portal-health.state}"
-SERVICES="${SERVICES:-api mongodb portal-gateway code-runner}"
+SERVICES="${SERVICES:-portal-nginx api mongodb portal-gateway code-runner}"
 
 problems=()
 for path in /health /portal/health; do

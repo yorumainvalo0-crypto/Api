@@ -2,7 +2,6 @@
 """Creates LibreChat's .env and portal-gateway.env with fresh, matching secrets.
 
 Usage (on the server, in /opt/LibreChat):
-  LIBRECHAT_HOST_PORT=3080 PORTAL_HOST_PORT=3090 \\
   ANTHROPIC_API_KEY=sk-ant-... OPENROUTER_API_KEY=sk-or-... \\
   PORTAL_ADMIN_USERNAME=michael PORTAL_ADMIN_PASSWORD='…' \\
   python3 /opt/portal/portal/deploy/scripts/setup-env.py [--target /opt/LibreChat] [--force]
@@ -22,7 +21,7 @@ import sys
 
 HERE = pathlib.Path(__file__).resolve().parent
 DEPLOY = HERE.parent
-REQUIRED = ["LIBRECHAT_HOST_PORT", "PORTAL_HOST_PORT", "ANTHROPIC_API_KEY", "PORTAL_ADMIN_USERNAME", "PORTAL_ADMIN_PASSWORD"]
+REQUIRED = ["ANTHROPIC_API_KEY", "PORTAL_ADMIN_USERNAME", "PORTAL_ADMIN_PASSWORD"]
 
 
 def apply(template: str, values: dict[str, str]) -> str:
@@ -83,8 +82,9 @@ def main() -> int:
     }
     portal_values.update(
         {
-            "LIBRECHAT_HOST_PORT": os.environ["LIBRECHAT_HOST_PORT"],
-            "PORTAL_HOST_PORT": os.environ["PORTAL_HOST_PORT"],
+            # Port the server's nginx forwards to (the old portal's port)
+            "PORTAL_HTTP_PORT": os.environ.get("PORTAL_HTTP_PORT", "45012"),
+            "PORTAL_DOMAIN": args.domain,
             "DOMAIN_CLIENT": url,
             "DOMAIN_SERVER": url,
             "ANTHROPIC_API_KEY": os.environ["ANTHROPIC_API_KEY"],

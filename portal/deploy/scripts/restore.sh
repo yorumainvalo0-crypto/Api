@@ -35,7 +35,7 @@ for item in uploads images skill; do
 done
 # Configuration only on request: it holds the secrets of the backed-up installation
 if [ "$RESTORE_CONFIG" = "true" ]; then
-  for item in .env portal-gateway.env librechat.yaml docker-compose.override.yml; do
+  for item in .env portal-gateway.env librechat.yaml docker-compose.override.yml portal-nginx; do
     [ -e "$staging/librechat/$item" ] && cp -a "$staging/librechat/$item" "$LIBRECHAT_DIR/$item"
   done
 fi

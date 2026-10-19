@@ -4,25 +4,47 @@ Schritt-für-Schritt-Anleitung für den Umzug vom alten Portal auf LibreChat + P
 (Plan: [`WEB-HOSTING-PLAN.md`](WEB-HOSTING-PLAN.md), Fortschritt: [`PORTAL-PROGRESS.md`](PORTAL-PROGRESS.md)).
 Alle Befehle als `root` auf dem Server (88.99.138.164). Dauer: ca. 1–2 Stunden plus Smoke-Test.
 
-> Platzhalter: `<LC_PORT>` = `LIBRECHAT_HOST_PORT`, `<GW_PORT>` = `PORTAL_HOST_PORT` (Docker-Ports vom Admin).
+**Prinzip:** Das alte Portal (Compose mit App, SearXNG und eigenem nginx) nimmt auf `127.0.0.1:45012`
+HTTP an; der nginx des Servers macht TLS auf 443 und leitet dorthin weiter. Das neue Portal hört mit
+seinem eigenen nginx-Container (`portal-nginx`) auf **genau demselben Port**. Der Server-nginx bleibt
+unverändert – Umschalten = alte Compose stoppen, neue starten (ca. 1 Minute Ausfall), Rollback umgekehrt.
+
+> Platzhalter: `<ALT>` = Verzeichnis der alten Compose (siehe Schritt 0).
 
 ## 0. Voraussetzungen
 
 - Docker Engine + **Docker Compose v2.24+** (`docker compose version`)
-- `inventory.sh` wurde ausgeführt, Ausgabe liegt vor (Ports, alte App, freier Speicher):
-  `sudo bash portal/deploy/scripts/inventory.sh > /root/inventory.txt`
 - Anthropic-API-Key, OpenRouter-Key (nur Bild/Sprache/Video), Admin-Benutzername + Passwort (≥ 12 Zeichen)
-- Empfohlen: 8 vCPU / 16 GB RAM, ≥ 40 GB frei (Images ca. 6 GB)
+- Empfohlen: 8 vCPU / 16 GB RAM, ≥ 40 GB frei (Images ca. 6 GB): `nproc; free -h; df -h /`
+
+Kurz prüfen:
+
+```bash
+docker compose ls                                   # Verzeichnis des alten Portals → <ALT>
+grep -rln '45012' /etc/nginx/sites-enabled/         # Site-Datei des Server-nginx
+grep -nE 'proxy_pass|client_max_body_size|X-Forwarded-For|proxy_buffering|proxy_read_timeout' \
+  /etc/nginx/sites-enabled/<site-datei>
+```
+
+Die Site muss `proxy_pass http://127.0.0.1:45012` haben und **`X-Forwarded-For`** setzen
+(sonst sehen die Rate-Limits nicht die echte IP). Fehlen `client_max_body_size 60M`,
+`proxy_buffering off` oder `proxy_read_timeout 600s` (Uploads, gestreamte Antworten), diese Zeilen
+aus [`portal/deploy/nginx/ai.dev.a-b-cloud.de.conf`](../portal/deploy/nginx/ai.dev.a-b-cloud.de.conf)
+ergänzen und `nginx -t && systemctl reload nginx` (schadet dem alten Portal nicht).
 
 ## 1. Altes Portal sichern
 
 ```bash
 mkdir -p /root/old-portal
-cp -a /etc/nginx/sites-available/ai.dev.a-b-cloud.de* /root/old-portal/   # Name laut inventory.txt
-# alte App-Daten/Compose-Datei laut inventory.txt ebenfalls nach /root/old-portal sichern
+cp -a /etc/nginx/sites-enabled/<site-datei> /root/old-portal/
+cd <ALT> && docker compose config > /root/old-portal/compose-resolved.yml
+# Daten des alten Portals (Volume app-data) als Archiv
+VOL=$(docker volume ls -q | grep 'app-data$'); echo "$VOL"     # genau ein Treffer, z. B. ai-portal_app-data
+docker run --rm -v "$VOL":/data:ro -v /root/old-portal:/backup alpine tar czf /backup/app-data.tgz -C /data .
 ```
 
-Das alte Portal läuft weiter, bis Schritt 7 nginx umstellt.
+Das alte Portal läuft weiter bis Schritt 7. Seine Konten und Chats werden **nicht** übernommen
+(andere Software); das Volume bleibt erhalten.
 
 ## 2. Code holen
 
@@ -65,40 +87,40 @@ cd /opt/LibreChat
 cp /opt/portal/portal/deploy/librechat.yaml .
 cp /opt/portal/portal/deploy/docker-compose.override.yml .
 cp -r /opt/portal/portal/deploy/skill .
+mkdir -p portal-nginx && cp /opt/portal/portal/deploy/nginx/portal.conf.template portal-nginx/
 
 # Schlüssel nicht in die Shell-History schreiben:
 read -rsp 'Anthropic-Key: ' ANTHROPIC_API_KEY; echo
 read -rsp 'OpenRouter-Key: ' OPENROUTER_API_KEY; echo
 read -rsp 'Admin-Passwort: ' PORTAL_ADMIN_PASSWORD; echo
 export ANTHROPIC_API_KEY OPENROUTER_API_KEY PORTAL_ADMIN_PASSWORD
-LIBRECHAT_HOST_PORT=<LC_PORT> PORTAL_HOST_PORT=<GW_PORT> PORTAL_ADMIN_USERNAME=<admin> \
-  python3 /opt/portal/portal/deploy/scripts/setup-env.py
+PORTAL_ADMIN_USERNAME=<admin> python3 /opt/portal/portal/deploy/scripts/setup-env.py
 ```
 
 `setup-env.py` schreibt `.env` und `portal-gateway.env` (Rechte 600) mit frischen, zueinander
-passenden Geheimnissen. Es meldet, falls noch ein `REPLACE_ME` übrig ist.
+passenden Geheimnissen und Port 45012. Es meldet, falls noch ein `REPLACE_ME` übrig ist.
 
-## 6. Starten und prüfen
+## 6. Starten (ohne Eingang) und prüfen
+
+Alles außer `portal-nginx` – das alte Portal belegt Port 45012 noch:
 
 ```bash
 cd /opt/LibreChat
-docker compose up -d
-docker compose ps                                  # alle Dienste "running", Gateway "healthy"
-curl -s http://127.0.0.1:<LC_PORT>/health          # OK
-curl -s http://127.0.0.1:<GW_PORT>/portal/health   # {"ok":true}
+docker compose up -d api portal-gateway code-runner admin-panel
+docker compose ps                    # Dienste "running", Gateway und Code-Runner "healthy"
+docker compose logs api | tail -20   # keine Fehler (MCP-Server "portal" verbunden)
 ```
 
-## 7. nginx umstellen
+## 7. Umschalten (ca. 1 Minute Ausfall)
 
 ```bash
-cp /opt/portal/portal/deploy/nginx/ai.dev.a-b-cloud.de.conf /etc/nginx/sites-available/ai.dev.a-b-cloud.de
-sed -i 's/LIBRECHAT_HOST_PORT/<LC_PORT>/; s/PORTAL_HOST_PORT/<GW_PORT>/' /etc/nginx/sites-available/ai.dev.a-b-cloud.de
-grep -n 'HOST_PORT' /etc/nginx/sites-available/ai.dev.a-b-cloud.de   # darf nichts finden
-nginx -t && systemctl reload nginx
+cd <ALT> && docker compose stop                       # altes Portal (App, SearXNG, nginx) anhalten
+cd /opt/LibreChat && docker compose up -d portal-nginx  # neues Portal übernimmt 127.0.0.1:45012
+curl -s -o /dev/null -w '%{http_code}\n' https://ai.dev.a-b-cloud.de/health          # 200
+curl -s -o /dev/null -w '%{http_code}\n' https://ai.dev.a-b-cloud.de/portal/health   # 200
 ```
 
-Die Sicherung des alten Site-Files bleibt in `/root/old-portal` (nicht in `sites-enabled`, sonst lädt
-nginx beide). Das TLS-Zertifikat (Let's Encrypt) wird weiterverwendet.
+Server-nginx und TLS-Zertifikat bleiben, wie sie sind.
 
 ## 8. Erster Admin-Login
 
@@ -119,7 +141,7 @@ nginx beide). Das TLS-Zertifikat (Let's Encrypt) wird weiterverwendet.
 - [ ] „Erstelle ein Bild …“ → Bild im Chat, Kosten im Dashboard (`/portal/admin/usage`)
 - [ ] „Halterung 60 × 40 × 10 mm mit zwei 8-mm-Löchern“ → 3D-Ansicht am Handy, STL-Download
 - [ ] Login-QR für die Testperson auf einem zweiten Gerät → gleiche Chats sichtbar
-- [ ] Von außen nicht erreichbar: `curl -m5 http://88.99.138.164:<LC_PORT>` und `:<GW_PORT>`, `:27017`, `:3000`
+- [ ] Von außen nicht erreichbar: `curl -m5 http://88.99.138.164:45012`, `:45443` (altes Portal), `:3080`, `:27017`, `:3000`
 - [ ] `curl -s -o /dev/null -w '%{http_code}' -X POST https://ai.dev.a-b-cloud.de/portal/mcp` → `404`
 
 ## 10. Betrieb einrichten
@@ -140,15 +162,15 @@ crontab -e
 
 ## 11. Altes Portal stoppen
 
-Nach ein paar Tagen ohne Probleme: alte App stoppen (laut `inventory.txt`), Sicherung in
-`/root/old-portal` noch 30 Tage aufheben.
+Ist nach dem Umschalten schon angehalten. Nach ein paar Tagen ohne Probleme:
+`cd <ALT> && docker compose down` (ohne `-v`, das Volume bleibt), Sicherung in `/root/old-portal`
+noch 30 Tage aufheben.
 
 ## Rollback
 
 ```bash
-cp /root/old-portal/ai.dev.a-b-cloud.de /etc/nginx/sites-available/ai.dev.a-b-cloud.de
-nginx -t && systemctl reload nginx          # altes Portal ist sofort wieder online
-cd /opt/LibreChat && docker compose stop    # neues Portal anhalten (Daten bleiben erhalten)
+cd /opt/LibreChat && docker compose stop    # neues Portal anhalten, gibt Port 45012 frei (Daten bleiben)
+cd <ALT> && docker compose start            # altes Portal ist sofort wieder online
 ```
 
 ## Updates

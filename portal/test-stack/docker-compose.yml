@@ -70,6 +70,15 @@ services:
       - ./data/logs:/app/logs
       - ./data/certs:/certs:ro
 
+  # The production entry point (portal/deploy/nginx/portal.conf.template), unchanged
+  portal-nginx:
+    image: mirror.gcr.io/library/nginx:1.27-alpine
+    depends_on: [api, portal-gateway]
+    environment:
+      - PUBLIC_HOST=portal.test:8443
+    volumes:
+      - ../deploy/nginx/portal.conf.template:/etc/nginx/templates/default.conf.template:ro
+
   nginx:
     image: mirror.gcr.io/library/nginx:1.27-alpine
     volumes:

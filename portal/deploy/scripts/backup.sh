@@ -25,7 +25,7 @@ done
 
 # Files and configuration; .env files hold secrets, so the backup directory stays private
 files=()
-for item in uploads images .env portal-gateway.env librechat.yaml docker-compose.override.yml skill; do
+for item in uploads images .env portal-gateway.env librechat.yaml docker-compose.override.yml skill portal-nginx; do
   if [ -e "$LIBRECHAT_DIR/$item" ]; then
     files+=("librechat/$item")
   else

@@ -23,7 +23,7 @@ generieren und **technische 3D-Modelle (3D-Druck/CAD) mit 3D-Vorschau** erstelle
 | A8  | **Ausgabe aller Dateitypen** (docx, xlsx, pptx, pdf, csv, zip, Bilder, Code …)                                     | Code-Interpreter + Skills (§5)          |
 | A9  | **Bild-, Sprach- und Video-Generierung** bleibt – über **OpenRouter-Key**, ebenfalls aus dem USD-Budget bezahlt    | Media-Dienst (MCP) (§6.6)               |
 | A10 | OpenRouter-Modelle im Chat **vorerst nicht anzeigen** (später zuschaltbar)                                         | Konfiguration (§4.1)                    |
-| A11 | Docker-Port nach Vorgabe des Admins                                                                                | Platzhalter `LIBRECHAT_HOST_PORT` (§3)  |
+| A11 | Docker-Port nach Vorgabe des Admins                                                                                | Port **45012** des alten Portals (§3)   |
 | A12 | AI erzeugt **technische 3D-Teile** (maßgenau, für 3D-Druck) mit **interaktiver 3D-Vorschau** im Web                | CAD-Dienst + 3D-Viewer (§6.7)           |
 | A13 | Claude Fable **nicht** freischalten                                                                                | Modellliste (§4.1)                      |
 
@@ -31,19 +31,22 @@ generieren und **technische 3D-Modelle (3D-Druck/CAD) mit 3D-Vorschau** erstelle
 
 - `ai.dev.a-b-cloud.de` → 88.99.138.164 (Hetzner), **nginx** auf 443 (HTTP/2, Let's Encrypt), 80 → 301 auf HTTPS.
 - Dahinter das alte Portal (React-SPA + API mit `/api/generate/image|speech|video|transcription`,
-  `/api/admin/users`, `/api/keys/credits`). Interner Port von außen nicht sichtbar.
+  `/api/admin/users`, `/api/keys/credits`) als Docker Compose: App, SearXNG (Websuche) und ein eigener
+  nginx-Container auf **`127.0.0.1:45012`** (HTTP), zu dem der Server-nginx weiterleitet
+  (zusätzlich `0.0.0.0:45443` HTTPS für Betrieb ohne Proxy).
 - **Wiederverwendbar:** Die OpenRouter-Aufrufe der alten App für Bild/Sprache/Video (Modelle, Parameter)
   → in Phase 0 aus deren Code/Config übernehmen.
 
 ## 3. Gesamtarchitektur
 
 ```
-                         https://ai.dev.a-b-cloud.de  (nginx, 443)
+                  https://ai.dev.a-b-cloud.de  (Server-nginx, 443, TLS – bleibt unverändert)
                                        │
+                         portal-nginx (127.0.0.1:45012, wie das alte Portal)
               ┌────────────────────────┴─────────────────────────┐
               │ /                                                │ /portal/…
               ▼                                                  ▼
-   LibreChat (127.0.0.1:${LIBRECHAT_HOST_PORT})        Portal-Gateway (127.0.0.1:${PORTAL_HOST_PORT})
+   LibreChat (api:3080, nur intern)                    Portal-Gateway (portal-gateway:8080, nur intern)
    ─ Chat-UI, Chats, Uploads                           ─ OIDC-Login-Server (IdP) für LibreChat
    ─ Endpoints: Anthropic, Agents                      ─ Gruppen, Einladungs-QR, Benutzernamen
    ─ Guthaben-Prüfung pro Anfrage                      ─ Login-QR pro Benutzer, Geräte-Sitzungen
@@ -64,8 +67,9 @@ generieren und **technische 3D-Modelle (3D-Druck/CAD) mit 3D-Vorschau** erstelle
 **Portal-Gateway**, das nur über offizielle Schnittstellen andockt (OIDC-Login, MCP, MongoDB-Collections
 `balances`/`transactions`). So bleiben LibreChat-Updates einfach.
 
-**Ports:** Alle Container lauschen nur auf `127.0.0.1` (Docker umgeht sonst `ufw`).
-`LIBRECHAT_HOST_PORT` gibt der Admin vor; `PORTAL_HOST_PORT` = frei wählbarer zweiter Port.
+**Ports:** Veröffentlicht wird nur `portal-nginx` auf `127.0.0.1:45012` – derselbe Port wie beim alten
+Portal, daher bleibt der Server-nginx unverändert und Umschalten/Rollback ist ein Compose-Stop/-Start.
+LibreChat und Gateway sind nur im Docker-Netz erreichbar (Docker umgeht sonst `ufw`).
 
 ## 4. LibreChat (Chat, Modelle, Effort, Guthaben)
 
@@ -362,11 +366,11 @@ Tokens (Einladung, Login) sind 128 Bit zufällig und werden **nur gehasht** gesp
 **Gesamt: ca. 17–24 Arbeitstage.** M1–M2 liefern schon ein nutzbares System (Accounts per CLI),
 M3–M5 ersetzen dann CLI durch QR-Codes, M6–M7 runden ab.
 
-**Rollback** bis M8 jederzeit: alte nginx-Site-Datei (`.old-portal`) zurück, alte App starten.
+**Rollback** jederzeit: neue Compose stoppen, alte starten (beide nutzen Port 45012) – siehe [GO-LIVE.md](GO-LIVE.md).
 
 ## 9. Abnahme-Checkliste
 
-- [ ] Ports 3000/`LIBRECHAT_HOST_PORT`/`PORTAL_HOST_PORT`/27017 von außen **nicht** erreichbar
+- [ ] Ports 3000/3080/45012/45443/27017 von außen **nicht** erreichbar
 - [ ] Standard-Modell Opus 5.5 / medium; Wechsel auf Sonnet/Haiku und Effort; keine OpenRouter-Modelle im Chat sichtbar `high` funktioniert
 - [ ] Upload: Bild, PDF, Word, Excel; Ausgabe: docx, xlsx, pptx, pdf, csv, zip, Bild
 - [ ] Einladungs-QR: Limit Personen + Zeitfenster greifen, Widerruf greift
@@ -381,7 +385,7 @@ M3–M5 ersetzen dann CLI durch QR-Codes, M6–M7 runden ab.
 
 ## 10. Offene Punkte
 
-1. **Docker-Port** für LibreChat (`LIBRECHAT_HOST_PORT`) – kommt vom Admin; zweiter Port fürs Gateway.
+1. ~~Docker-Port~~ → aus der alten Compose: 45012 (portal-nginx übernimmt ihn).
 2. Wo soll der Gateway-Code liegen: eigenes Repository (empfohlen) oder Ordner in diesem Repo?
 3. Standardbudgets: pro Person z. B. 5 USD/Monat? Reset monatlich zum 1. oder 30 Tage ab Beitritt?
 4. Zugriff auf den Code/die Config des alten Portals (für OpenRouter-Modelle Bild/Sprache/Video).

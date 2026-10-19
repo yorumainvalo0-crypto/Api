@@ -20,17 +20,26 @@ MongoDB und Test-Doubles für Anthropic/OpenRouter). Auf dem Hetzner-Server ist 
 | M7b     | CAD-Dienst + 3D-Viewer                               | ✅ fertig       | ✅ 6 + 3 + 2 |
 | M8      | Härtung, Backup/Restore, Go-live-Anleitung           | ✅ fertig       | ✅ 4 + 1 + Restore |
 
-**Nächster Schritt:** Inbetriebnahme auf dem Server nach [GO-LIVE.md](GO-LIVE.md) – sobald die Ports feststehen.
+**Nächster Schritt:** Inbetriebnahme auf dem Server nach [GO-LIVE.md](GO-LIVE.md) – alles Nötige liegt vor.
 
 ## Wartet auf dich
 
-- **Docker-Port** für LibreChat (`LIBRECHAT_HOST_PORT`) und Gateway (`PORTAL_HOST_PORT`) – Platzhalter sind gesetzt.
-- Server-Bestandsaufnahme ausführen (siehe M0) und Ausgabe schicken.
 - **Media-Modelle** prüfen/festlegen (Standard: Bilder `google/gemini-2.5-flash-image`, Sprache
   `openai/gpt-4o-mini-tts`, Video `google/veo-3.1`) – gern die Modelle aus dem alten Portal nennen.
 - **3D-Drucker/Slicer** (z. B. Bambu, Prusa) – dann passe ich Toleranzen und Bauraum im CAD-Skill an.
 
 ## Log
+
+### 19.10.2026 – Port 45012 aus der alten Compose übernommen
+
+- Das alte Portal läuft mit eigenem nginx-Container auf `127.0.0.1:45012`, der Server-nginx (TLS) leitet dorthin.
+- Das neue Portal bekommt dafür ebenfalls einen nginx-Container (`portal-nginx`) auf **demselben Port**:
+  der Server-nginx bleibt unverändert. **Umschalten** = alte Compose stoppen, neue starten (ca. 1 Minute);
+  **Rollback** umgekehrt. Die beiden Port-Platzhalter entfallen, LibreChat und Gateway sind nur noch intern erreichbar.
+- Der Test-Stack läuft jetzt genauso (Server-nginx → portal-nginx → LibreChat/Gateway); dabei geprüft:
+  echte Client-IP kommt an, eine gefälschte `X-Forwarded-For` wird ignoriert, `/portal/mcp` bleibt von außen 404.
+- [GO-LIVE.md](GO-LIVE.md) entsprechend umgeschrieben (Prüfung des Server-nginx, Sicherung des alten Volumes,
+  Start ohne Eingang, Umschalten, Rollback). **Tests:** 30 Browser-Tests grün über die neue Kette.
 
 ### 19.10.2026 – Anmeldung mit Passwort (ohne Authenticator-App)
 
