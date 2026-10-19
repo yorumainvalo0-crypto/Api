@@ -104,8 +104,8 @@ test('Claude starts a video; when it is ready the status tool returns the link',
   await page.getByText('Das Video wird erstellt.').first().waitFor({ timeout: 90_000 })
   const videoId = (await lastToolResult()).match(/Video-ID: ([0-9a-f-]{36})/)[1]
 
-  // The gateway polls OpenRouter every 15 s in the background
-  await waitFor(async () => (await mediaCharges()).some((c) => c.mediaKind === 'video'), {
+  // Reserved right away, settled to the real cost when the gateway's 15 s poll sees it finished
+  await waitFor(async () => (await mediaCharges()).some((c) => c.mediaKind === 'video' && c.mediaStatus === 'charged'), {
     message: 'video finished and charged',
     timeoutMs: 45_000,
   })
@@ -113,6 +113,9 @@ test('Claude starts a video; when it is ready the status tool returns the link',
   await sendPrompt(page, 'VIDEO_FERTIG?')
   await page.getByText('Status geprüft.').first().waitFor({ timeout: 90_000 })
   assert.match(await lastToolResult(), /Das Video ist fertig \(Kosten 0\.50 USD\)/)
+  const video = (await mediaCharges()).filter((c) => c.mediaKind === 'video')
+  assert.equal(video.length, 1)
+  assert.equal(video[0].tokenValue, -500_000) // the 3 USD reservation was corrected to the real 0.50 USD
 })
 
 test('media costs show up in the admin dashboard', async () => {
