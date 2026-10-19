@@ -133,7 +133,8 @@ crontab -e
 
 - Backup einmal von Hand starten und prüfen: `ls -lh /var/backups/portal`
 - Restore (getestet): `docker compose stop api portal-gateway && restore.sh <STAMP>` → `docker compose up -d`
-- **Anthropic Console:** monatliches Ausgabenlimit setzen; Websuche deaktivieren (wird nicht übers Guthaben abgerechnet).
+- **Anthropic Console:** monatliches Ausgabenlimit setzen; **Websuche für die Organisation erlauben**
+  (sonst lehnt die API Anfragen mit Websuche ab – im Smoke-Test „Wie ist das Wetter heute in Berlin?“ fragen).
 - **OpenRouter:** Guthaben-/Key-Limit setzen (Bild/Sprache/Video).
 
 ## 11. Altes Portal stoppen

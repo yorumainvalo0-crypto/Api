@@ -1,6 +1,7 @@
 import { startBudgetJobs } from './budgets.js'
 import { loadConfig } from './config.js'
 import { pruneMedia } from './media.js'
+import { billWebSearches } from './search.js'
 import { pollVideoJobs } from './tools/media.js'
 import { connectDatabase } from './db.js'
 import { buildApp } from './server.js'
@@ -14,6 +15,7 @@ if (admin) app.log.info(`created first admin "${admin.username}"`)
 const stopJobs = startBudgetJobs(db, (error) => app.log.error({ err: error }, 'budget job failed'))
 const mediaTimer = setInterval(() => {
   pollVideoJobs(config, db).catch((error) => app.log.error({ err: error }, 'video job failed'))
+  billWebSearches(config, db).catch((error) => app.log.error({ err: error }, 'web search billing failed'))
 }, 15_000)
 const pruneTimer = setInterval(() => {
   pruneMedia(config, db).catch((error) => app.log.error({ err: error }, 'media prune failed'))

@@ -29,10 +29,17 @@ MongoDB und Test-Doubles für Anthropic/OpenRouter). Auf dem Hetzner-Server ist 
 - **Media-Modelle** prüfen/festlegen (Standard: Bilder `google/gemini-2.5-flash-image`, Sprache
   `openai/gpt-4o-mini-tts`, Video `google/veo-3.1`) – gern die Modelle aus dem alten Portal nennen.
 - **3D-Drucker/Slicer** (z. B. Bambu, Prusa) – dann passe ich Toleranzen und Bauraum im CAD-Skill an.
-- **Websuche** (Schalter „Web Search“ in LibreChat): ja oder nein? LibreChat bucht die Suchkosten
-  **nicht** vom Guthaben ab. Bis zur Entscheidung: in der Anthropic Console für den Workspace abschalten.
 
 ## Log
+
+### 19.10.2026 – Websuche über Anthropic
+
+- Claude kann bei Bedarf im Web suchen (Anthropic-Websuche, in allen drei Modellen an).
+- LibreChat bucht dafür nur die Tokens ab. Das Gateway zählt deshalb alle 15 s die Suchen in neuen
+  Antworten und bucht **0,01 USD pro Suche** vom Budget der Person – jede Suche genau einmal,
+  auch bei fortgesetzten Antworten. Im Dashboard erscheint das als Modell `web_search`.
+- **Tests:** 3 Gateway-Tests (Zählen, keine Doppelbuchung bei parallelen Läufen, Dashboard) + 1 Browser-Test
+  (zwei Suchen im Chat → 0,02 USD abgebucht). Gesamt: 62 Gateway- + 18 Runner- + 29 Browser-Tests grün.
 
 ### 19.10.2026 – M8 fertig (Härtung, Backup/Restore, Go-live-Anleitung)
 

@@ -76,6 +76,8 @@ modelSpecs:
         endpoint: "anthropic"
         model: "claude-opus-5-5"
         effort: "medium"
+        # Anthropic web search; Claude decides when to search, the gateway bills 0.01 USD per search
+        web_search: true
     - name: "sonnet-5-5"
       label: "Claude Sonnet 5.5"
       description: "Schneller und günstiger"
@@ -87,6 +89,8 @@ modelSpecs:
         endpoint: "anthropic"
         model: "claude-sonnet-5-5"
         effort: "medium"
+        # Anthropic web search; Claude decides when to search, the gateway bills 0.01 USD per search
+        web_search: true
     - name: "haiku-5-5"
       label: "Claude Haiku 5.5"
       description: "Sehr günstig für einfache Aufgaben"
@@ -98,6 +102,8 @@ modelSpecs:
         endpoint: "anthropic"
         model: "claude-haiku-5-5"
         effort: "medium"
+        # Anthropic web search; Claude decides when to search, the gateway bills 0.01 USD per search
+        web_search: true
 
 # Media tools (image, speech, video via OpenRouter, M7) and CAD tools (3D parts, M7b) served by the portal gateway
 # Internal MCP servers are blocked by default (SSRF protection); allow only the gateway

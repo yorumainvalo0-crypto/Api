@@ -33,6 +33,8 @@ const schema = z.object({
   VIDEO_MODEL: z.string().default('google/veo-3.1'),
   /** Minimum remaining balance before a media request is sent (rough upper cost per call) */
   IMAGE_MIN_BALANCE_USD: z.coerce.number().nonnegative().default(0.2),
+  /** Anthropic's price per web search (10 USD per 1000), billed to the person's budget */
+  WEB_SEARCH_USD: z.coerce.number().nonnegative().default(0.01),
   TTS_MIN_BALANCE_USD: z.coerce.number().nonnegative().default(0.05),
   VIDEO_MIN_BALANCE_USD: z.coerce.number().nonnegative().default(3),
   /** Admin password/TOTP attempts per IP and 5 minutes; invite joins per IP and 10 minutes */

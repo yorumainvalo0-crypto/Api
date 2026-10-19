@@ -101,8 +101,9 @@ generieren und **technische 3D-Modelle (3D-Druck/CAD) mit 3D-Vorschau** erstelle
   (`executeCode`, `skills`, `artifacts`, `mcpServers`) – keine vorab angelegten Agenten nötig.
   Effort-Regler im Parameter-Panel funktioniert (Medium → High kommt bei Claude an).
 - Chat-Titel werden mit Haiku 5.5 erzeugt (spart Kosten).
-- ⚠ Websuche (Anthropic-Werkzeug) wird von LibreChat **nicht** vom Guthaben abgebucht → bis zur
-  Entscheidung in der Anthropic Console abschalten.
+- Websuche (Anthropic-Werkzeug `web_search`) ist in allen Specs an; Claude entscheidet, wann gesucht wird.
+  LibreChat bucht nur die Tokens ab – das Gateway zählt die Suchen in den gespeicherten Antworten und bucht
+  0,01 USD pro Suche vom Budget (`WEB_SEARCH_USD`), sichtbar im Dashboard als Modell `web_search`.
 
 ### 4.4 Login nur über das Gateway
 
@@ -380,7 +381,7 @@ M3–M5 ersetzen dann CLI durch QR-Codes, M6–M7 runden ab.
 2. Wo soll der Gateway-Code liegen: eigenes Repository (empfohlen) oder Ordner in diesem Repo?
 3. Standardbudgets: pro Person z. B. 5 USD/Monat? Reset monatlich zum 1. oder 30 Tage ab Beitritt?
 4. Zugriff auf den Code/die Config des alten Portals (für OpenRouter-Modelle Bild/Sprache/Video).
-5. Websuche für Claude gewünscht? (verursacht Zusatzkosten pro Suche)
+5. ~~Websuche~~ → entschieden: Anthropic-Websuche an, 0,01 USD pro Suche vom Budget.
 6. 3D-Druck: Welcher Drucker/Slicer (z. B. Bambu, Prusa) – für passende Toleranzen und Bauraum-Prüfung im CAD-Skill?
 
 Code und Konfiguration: [`portal/`](../portal/) · Fortschritt: [`PORTAL-PROGRESS.md`](PORTAL-PROGRESS.md) · Inbetriebnahme: [`GO-LIVE.md`](GO-LIVE.md)

@@ -54,6 +54,38 @@ function streamToolUse(res, model, tool, input) {
   res.end()
 }
 
+/** Anthropic's server-side web search: search blocks, results and the answer in one message. */
+function streamWebSearch(res, model, queries, reply) {
+  res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' })
+  const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+  send('message_start', {
+    type: 'message_start',
+    message: { id: `msg_search_${requests.length}`, type: 'message', role: 'assistant', model, content: [], stop_reason: null, usage: { input_tokens: INPUT_TOKENS, output_tokens: 1 } },
+  })
+  let index = 0
+  queries.forEach((query, n) => {
+    const id = `srvtoolu_mock_${requests.length}_${n}`
+    send('content_block_start', { type: 'content_block_start', index, content_block: { type: 'server_tool_use', id, name: 'web_search', input: {} } })
+    send('content_block_delta', { type: 'content_block_delta', index, delta: { type: 'input_json_delta', partial_json: JSON.stringify({ query }) } })
+    send('content_block_stop', { type: 'content_block_stop', index })
+    index++
+    const content = [{ type: 'web_search_result', url: `https://example.org/${n}`, title: `Treffer ${n + 1} zu ${query}`, encrypted_content: 'ZW5jcnlwdGVk', page_age: null }]
+    send('content_block_start', { type: 'content_block_start', index, content_block: { type: 'web_search_tool_result', tool_use_id: id, content } })
+    send('content_block_stop', { type: 'content_block_stop', index })
+    index++
+  })
+  send('content_block_start', { type: 'content_block_start', index, content_block: { type: 'text', text: '' } })
+  send('content_block_delta', { type: 'content_block_delta', index, delta: { type: 'text_delta', text: reply } })
+  send('content_block_stop', { type: 'content_block_stop', index })
+  send('message_delta', {
+    type: 'message_delta',
+    delta: { stop_reason: 'end_turn', stop_sequence: null },
+    usage: { output_tokens: OUTPUT_TOKENS, server_tool_use: { web_search_requests: queries.length } },
+  })
+  send('message_stop', { type: 'message_stop' })
+  res.end()
+}
+
 function readBody(req) {
   return new Promise((resolve, reject) => {
     const chunks = []
@@ -189,6 +221,7 @@ const server = http.createServer(async (req, res) => {
   if (req.method === 'POST' && url.pathname.endsWith('/messages')) {
     const model = body?.model ?? 'unknown'
     const scenario = body?.stream ? findScenario(body) : null
+    if (scenario?.webSearch) return streamWebSearch(res, model, scenario.webSearch, scenario.reply ?? REPLY)
     if (scenario && !hasToolResult(lastUserMessage(body))) {
       return streamToolUse(res, model, scenario.tool, scenario.input)
     }
