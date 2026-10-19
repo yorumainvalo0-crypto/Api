@@ -4,7 +4,7 @@ name: portal-test
 
 services:
   mongodb:
-    image: mirror.gcr.io/library/mongo:8.0.20
+    image: mirror.gcr.io/library/mongo:4.4.29
     command: mongod --noauth
     ports:
       - "127.0.0.1:27017:27017"

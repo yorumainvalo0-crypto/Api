@@ -71,7 +71,31 @@ for _ in $(seq 1 60); do
 done
 [ "${gateway:-}" = healthy ] || { docker compose logs --tail 30 portal-gateway >&2; fail "Gateway startet nicht."; }
 
-# --- 5. Entry point on the old portal's port ---
+# --- 5. Self-test of code execution and CAD on this machine's CPU ---
+say "Selbsttest: Code-Ausführung und 3D-Teile"
+selftest_code='import numpy, pandas, matplotlib.pyplot as plt, docx, openpyxl, pptx, reportlab, PIL, pypdf
+plt.plot(numpy.arange(5)); plt.savefig("test.png")
+pandas.DataFrame({"a": [1, 2]}).to_excel("test.xlsx")
+docx.Document().save("test.docx")
+print("code ok")'
+code_result=$(docker compose exec -T -e SELFTEST_CODE="$selftest_code" api node -e '
+fetch("http://code-runner:8000/v1/exec", { method: "POST", headers: { "content-type": "application/json" },
+  body: JSON.stringify({ lang: "py", code: process.env.SELFTEST_CODE }) })
+  .then((r) => r.json()).then((j) => console.log(j.stdout.includes("code ok") ? "ok" : "FEHLER: " + (j.stderr || j.stdout).slice(-600)))
+  .catch((e) => console.log("FEHLER: " + e.message))' 2>&1 || true)
+cad_result=$(docker compose exec -T portal-gateway node -e '
+fetch("http://code-runner:8000/v1/cad", { method: "POST", headers: { "content-type": "application/json" },
+  body: JSON.stringify({ code: "from build123d import *\nresult = Box(20, 10, 5)", formats: ["step"] }) })
+  .then((r) => r.json()).then((j) => console.log(j.ok ? "ok" : "FEHLER: " + String(j.stderr).slice(-600)))
+  .catch((e) => console.log("FEHLER: " + e.message))' 2>&1 || true)
+echo "Code-Ausführung: $code_result"
+echo "3D-Teile:        $cad_result"
+if [ "$code_result" != ok ] || [ "$cad_result" != ok ]; then
+  echo "Der Chat funktioniert trotzdem; betroffen sind nur Dateien/Code bzw. 3D-Teile."
+  confirm "Trotzdem weitermachen?" || { echo "Abgebrochen – das alte Portal läuft weiter."; exit 1; }
+fi
+
+# --- 6. Entry point on the old portal's port ---
 port=$(sed -n 's/^PORTAL_HTTP_PORT=//p' .env)
 project=$(docker compose config --format json 2>/dev/null | python3 -c 'import json,sys; print(json.load(sys.stdin)["name"])')
 old=$(docker ps --filter "publish=$port" --format '{{.Label "com.docker.compose.project"}}' | grep -vx "$project" | sort -u | head -1 || true)
@@ -86,7 +110,7 @@ elif ! docker compose ps -q portal-nginx | grep -q . && (exec 3<>"/dev/tcp/127.0
 fi
 docker compose up -d portal-nginx
 
-# --- 6. Check ---
+# --- 7. Check ---
 for _ in $(seq 1 40); do
   chat=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/health" || true)
   portal=$(curl -s -o /dev/null -w '%{http_code}' "http://127.0.0.1:$port/portal/health" || true)

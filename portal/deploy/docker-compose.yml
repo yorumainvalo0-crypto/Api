@@ -7,7 +7,7 @@ name: librechat-portal
 
 services:
   mongodb:
-    image: mirror.gcr.io/library/mongo:8.0.20
+    image: mirror.gcr.io/library/mongo:4.4.29
     restart: always
     command: mongod --noauth
     volumes:
