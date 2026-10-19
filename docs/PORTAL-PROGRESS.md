@@ -15,8 +15,8 @@ MongoDB und Test-Doubles für Anthropic/OpenRouter). Auf dem Hetzner-Server ist 
 | M3      | Gateway-Kern: Login, Admin, Login-QR, Geräte         | ✅ fertig       | ✅ 25 + 5 |
 | M4      | Gruppen + Einladungs-QR                              | ✅ fertig       | ✅ 6 + 4 |
 | M5      | Budgets in USD                                       | ✅ fertig       | ✅ 6 + 3 |
-| M6      | Admin-Dashboard                                      | ⏳ in Arbeit    |      |
-| M7      | Media (Bild/Sprache/Video via OpenRouter)            | offen          |      |
+| M6      | Admin-Dashboard                                      | ✅ fertig       | ✅ 6 + 3 |
+| M7      | Media (Bild/Sprache/Video via OpenRouter)            | ⏳ in Arbeit    |      |
 | M7b     | CAD-Dienst + 3D-Viewer                               | offen          |      |
 | M8      | Härtung, Backup/Restore, Go-live-Anleitung           | offen          |      |
 
@@ -28,6 +28,24 @@ MongoDB und Test-Doubles für Anthropic/OpenRouter). Auf dem Hetzner-Server ist 
   **nicht** vom Guthaben ab. Bis zur Entscheidung: in der Anthropic Console für den Workspace abschalten.
 
 ## Log
+
+### 19.10.2026 – M6 fertig (Verbrauchs-Dashboard)
+
+- Admin-Bereich **Verbrauch** (`/portal/admin/usage`):
+  - Filter: Zeitraum (heute, 7/30/90 Tage, dieser/letzter Monat) und Gruppe.
+  - Kacheln: **Kosten in USD**, Tokens rein/raus, Anfragen, aktive Personen.
+  - Diagramm **Kosten pro Tag** (bei „heute“ pro Stunde), Tooltip beim Zeigen auf einen Balken
+    (Kosten + Tokens), Hell- und Dunkelmodus.
+  - Tabellen **nach Person** (inkl. Gruppe und Restguthaben), **nach Modell**, **nach Gruppe**.
+  - **CSV-Export** (pro Tag, Person, Modell; deutsches Zahlenformat, öffnet direkt in Excel).
+- Quelle sind LibreChats eigene Buchungen; Gutschriften und Monatsresets zählen nicht als Verbrauch,
+  Media-Kosten (M7) schon. Tagesgrenzen in deutscher Zeit.
+- **Tests:** 6 Gateway-Tests (Summen je Person/Modell/Gruppe, Filter, leere Tage, Tagesgrenzen,
+  CSV) + 3 Browser-Tests: Tagessumme im Dashboard = Summe der LibreChat-Buchungen; Tooltip; CSV.
+- Beim Anschauen gefunden und behoben: Tooltip erschien nicht, wenn man direkt auf den Balken
+  zeigte; Balken in der Tabelle überdeckten die Beträge.
+- Screenshots: [hell](screenshots/dashboard-light.png) · [dunkel](screenshots/dashboard-dark.png)
+
 
 ### 19.10.2026 – M5 fertig (Budgets in US-Dollar)
 
