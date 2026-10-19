@@ -6,7 +6,7 @@ Stand: 19.10.2026 · Status: Planung (noch nichts auf dem Server umgesetzt)
 
 Das bestehende „A-B Cloud AI Portal“ auf `ai.dev.a-b-cloud.de` wird durch eine Claude.ai-ähnliche
 Oberfläche ersetzt, in der eingeladene Personen per **QR-Code** beitreten, Claude (Anthropic API) und
-weitere Modelle (OpenRouter) nutzen, **Dateien hochladen und erzeugen**, **Bilder/Sprache/Video**
+nutzen, **Dateien hochladen und erzeugen**, **Bilder/Sprache/Video**
 generieren – jeweils mit einem **Budget in US-Dollar**, das der Admin festlegt und überwacht.
 
 ## 1. Anforderungen
@@ -22,7 +22,8 @@ generieren – jeweils mit einem **Budget in US-Dollar**, das der Admin festlegt
 | A7  | Jeder wählt **Modell und Aufwand (Effort)** selbst, Standard **Claude Opus 5.5, Effort „medium“**                  | LibreChat Model-Specs (§4.3)            |
 | A8  | **Ausgabe aller Dateitypen** (docx, xlsx, pptx, pdf, csv, zip, Bilder, Code …)                                     | Code-Interpreter + Skills (§5)          |
 | A9  | **Bild-, Sprach- und Video-Generierung** bleibt – über **OpenRouter-Key**, ebenfalls aus dem USD-Budget bezahlt    | Media-Dienst (MCP) (§6.6)               |
-| A10 | Docker-Port nach Vorgabe des Admins                                                                                | Platzhalter `LIBRECHAT_HOST_PORT` (§3)  |
+| A10 | OpenRouter-Modelle im Chat **vorerst nicht anzeigen** (später zuschaltbar)                                         | Konfiguration (§4.1)                    |
+| A11 | Docker-Port nach Vorgabe des Admins                                                                                | Platzhalter `LIBRECHAT_HOST_PORT` (§3)  |
 
 ## 2. Ist-Zustand (geprüft am 19.10.2026)
 
@@ -42,7 +43,7 @@ generieren – jeweils mit einem **Budget in US-Dollar**, das der Admin festlegt
               ▼                                                  ▼
    LibreChat (127.0.0.1:${LIBRECHAT_HOST_PORT})        Portal-Gateway (127.0.0.1:${PORTAL_HOST_PORT})
    ─ Chat-UI, Chats, Uploads                           ─ OIDC-Login-Server (IdP) für LibreChat
-   ─ Endpoints: Anthropic, OpenRouter, Agents          ─ Gruppen, Einladungs-QR, Benutzernamen
+   ─ Endpoints: Anthropic, Agents                      ─ Gruppen, Einladungs-QR, Benutzernamen
    ─ Guthaben-Prüfung pro Anfrage                      ─ Login-QR pro Benutzer, Geräte-Sitzungen
    ─ Model-Specs (Standard Opus 5.5 / medium)          ─ Budgets USD (setzen, aufladen, Monats-Reset)
               │            │                           ─ Admin-Dashboard (USD/Tokens)
@@ -53,7 +54,7 @@ generieren – jeweils mit einem **Budget in US-Dollar**, das der Admin festlegt
           MongoDB  ◀──────── liest transactions / schreibt balances ┘
           (DB „LibreChat“ + DB „portal“)        Meilisearch, (optional RAG + pgvector)
 
-   Externe APIs: Anthropic (Claude) · OpenRouter (andere Modelle, Bild/Sprache/Video)
+   Externe APIs: Anthropic (Claude) · OpenRouter (nur Bild/Sprache/Video)
 ```
 
 **Grundsatz:** LibreChat bleibt **unverändert** (kein Fork) – alles Fehlende kommt in das eigene
@@ -71,7 +72,7 @@ generieren – jeweils mit einem **Budget in US-Dollar**, das der Admin festlegt
 | ------------ | ------------------------------------------------------ | ------------------------------------------------------------ |
 | `anthropic`  | Claude direkt (Opus 5.5, Sonnet 5.5, Haiku 5.5)         | eingebaute Tabelle: Opus 5.5 $4/$20, Sonnet 5.5 $2/$10, Haiku 5.5 $0,10/$0,50 pro 1 M Tokens |
 | `agents`     | Claude **mit Werkzeugen** (Code/Dateien, Media, Skills) | wie das zugrunde liegende Modell                             |
-| `OpenRouter` | alle anderen Modelle (GPT, Gemini, Llama …)            | automatisch aus OpenRouters `/models`-Preisliste             |
+| `OpenRouter` | **vorerst ausgeblendet** – andere Chat-Modelle (GPT, Gemini …), später per Config zuschaltbar | automatisch aus OpenRouters `/models`-Preisliste |
 
 ### 4.2 Guthaben (technische Basis für §6.4)
 
@@ -87,8 +88,8 @@ generieren – jeweils mit einem **Budget in US-Dollar**, das der Admin festlegt
 - **Model-Specs** in `librechat.yaml`, `enforce: false` → Nutzer dürfen frei wechseln.
 - Standard-Spec (`default: true`): **„Claude Opus 5.5“** = Agent mit Modell `claude-opus-5-5`,
   `effort: medium` und allen Werkzeugen (Datei-Ausgabe, Media).
-- Weitere Specs: „Claude Sonnet 5.5“, „Claude Haiku 5.5“ (ebenfalls Agents mit Werkzeugen),
-  „OpenRouter – alle Modelle“.
+- Weitere Specs: „Claude Sonnet 5.5“, „Claude Haiku 5.5“ (ebenfalls Agents mit Werkzeugen).
+  Im Chat erscheinen **nur Claude-Modelle**; OpenRouter dient vorerst ausschließlich dem Media-Dienst (§6.6).
 - **Effort:** Regler im Parameter-Panel und „Thinking“-Auswahl pro Nachricht
   (`low` · `medium` · `high` · `xhigh` · `max`). LibreChat sendet ihn als `output_config.effort`.
   Bei Opus 5.5 ist Thinking immer an; Effort steuert Tiefe **und** Kosten.
@@ -196,7 +197,7 @@ Zeitpunkt, Art) + Media-Buchungen aus §6.6.
 | -------------------- | ------------------------------------------------------------------------------------------- |
 | Übersicht            | Kosten USD und Tokens heute / 7 Tage / Monat; Verlauf als Diagramm (Stunde/Tag/Woche)       |
 | Nach Benutzer        | Tabelle: Benutzer, Gruppe, Budget, verbraucht, Rest, letzte Aktivität; Klick → Verlauf      |
-| Nach Modell/Anbieter | Anteil Opus/Sonnet/Haiku/OpenRouter/Media an Kosten und Tokens                               |
+| Nach Modell/Anbieter | Anteil Opus/Sonnet/Haiku/Media an Kosten und Tokens                               |
 | Nach Gruppe          | Verbrauch je Gruppe und Einladung                                                           |
 | Export               | CSV für beliebigen Zeitraum                                                                 |
 
@@ -265,7 +266,7 @@ Tokens (Einladung, Login) sind 128 Bit zufällig und werden **nur gehasht** gesp
 | M  | Inhalt                                                                                                   | Aufwand  | Fertig, wenn …                                                                 |
 | -- | -------------------------------------------------------------------------------------------------------- | -------- | ------------------------------------------------------------------------------ |
 | M0 | Bestandsaufnahme: Ports, Servergröße, alte App sichern, OpenRouter-Modelle der alten App notieren        | 0,5 Tag  | Backup + Notizen liegen vor, Ports festgelegt                                  |
-| M1 | LibreChat-Basis: Compose, nginx (Testpfad), Anthropic + OpenRouter, Model-Specs, Guthaben-Anzeige        | 1 Tag    | Chat mit Opus 5.5/medium läuft, Effort wählbar, Kosten werden gebucht          |
+| M1 | LibreChat-Basis: Compose, nginx (Testpfad), Anthropic, Model-Specs (nur Claude), Guthaben-Anzeige        | 1 Tag    | Chat mit Opus 5.5/medium läuft, Effort wählbar, Kosten werden gebucht          |
 | M2 | Code-Interpreter + Skills für docx/xlsx/pptx/pdf                                                          | 1–2 Tage | Claude erzeugt alle vier Formate als Download                                  |
 | M3 | Gateway-Kern: OIDC-IdP, Admin-Login mit TOTP, Benutzer, Login-QR, Geräte                                  | 3–4 Tage | Login per QR auf zweitem Gerät zeigt dieselben Chats                           |
 | M4 | Gruppen + Einladungs-QR (Anzahl, Zeitfenster, Benutzername)                                               | 2 Tage   | QR für 3 Personen: 3 Beitritte klappen, der 4. und nach Ablauf wird abgelehnt  |
@@ -282,7 +283,7 @@ M3–M5 ersetzen dann CLI durch QR-Codes, M6–M7 runden ab.
 ## 9. Abnahme-Checkliste
 
 - [ ] Ports 3000/`LIBRECHAT_HOST_PORT`/`PORTAL_HOST_PORT`/27017 von außen **nicht** erreichbar
-- [ ] Standard-Modell Opus 5.5 / medium; Wechsel auf Sonnet/Haiku/OpenRouter und Effort `high` funktioniert
+- [ ] Standard-Modell Opus 5.5 / medium; Wechsel auf Sonnet/Haiku und Effort; keine OpenRouter-Modelle im Chat sichtbar `high` funktioniert
 - [ ] Upload: Bild, PDF, Word, Excel; Ausgabe: docx, xlsx, pptx, pdf, csv, zip, Bild
 - [ ] Einladungs-QR: Limit Personen + Zeitfenster greifen, Widerruf greift
 - [ ] Login-QR: einmalig, Ablauf, Widerruf, Geräteliste

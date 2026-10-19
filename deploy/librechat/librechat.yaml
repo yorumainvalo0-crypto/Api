@@ -19,8 +19,8 @@ interface:
     modalAcceptance: true
     modalTitle: "Nutzungsbedingungen"
     modalContent: |
-      Dieses Portal nutzt die Anthropic API und OpenRouter. Deine Eingaben und hochgeladenen
-      Dateien werden zur Verarbeitung an diese Anbieter übertragen.
+      Dieses Portal nutzt die Anthropic API (Chat) und OpenRouter (Bild, Sprache, Video). Deine
+      Eingaben und hochgeladenen Dateien werden zur Verarbeitung an diese Anbieter übertragen.
 
       - Es gilt die Usage Policy von Anthropic: https://www.anthropic.com/legal/aup
       - Keine vertraulichen Kundendaten oder Passwörter eingeben.
@@ -41,18 +41,19 @@ balance:
 endpoints:
   agents:
     capabilities: ["execute_code", "skills", "artifacts", "tools", "context", "ocr"]
-  custom:
-    - name: "OpenRouter"
-      apiKey: "${OPENROUTER_KEY}"
-      baseURL: "https://openrouter.ai/api/v1"
-      models:
-        default: ["openai/gpt-5"]
-        # Also fetches OpenRouter's prices for balance accounting
-        fetch: true
-      titleConvo: true
-      titleModel: "current_model"
-      dropParams: ["stop"]
-      modelDisplayLabel: "OpenRouter"
+  # OpenRouter chat models: hidden for now. To enable, uncomment and add ",custom" to ENDPOINTS.
+  # custom:
+  #   - name: "OpenRouter"
+  #     apiKey: "${OPENROUTER_KEY}"
+  #     baseURL: "https://openrouter.ai/api/v1"
+  #     models:
+  #       default: ["openai/gpt-5"]
+  #       # Also fetches OpenRouter's prices for balance accounting
+  #       fetch: true
+  #     titleConvo: true
+  #     titleModel: "current_model"
+  #     dropParams: ["stop"]
+  #     modelDisplayLabel: "OpenRouter"
 
 # Default: Claude Opus 5.5 with medium effort; users may switch model and effort.
 # The agent_id values come from agents created once in the UI (milestone M1/M2).
