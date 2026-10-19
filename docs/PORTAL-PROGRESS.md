@@ -28,6 +28,19 @@ MongoDB und Test-Doubles für Anthropic/OpenRouter). Auf dem Hetzner-Server ist 
 
 ## Log
 
+### 19.10.2026 – Ein Ordner, ein Befehl
+
+- Das Portal kommt jetzt als **ein Ordner** `ai-portal-neu` (Archiv zum Hochladen) mit eigener Docker Compose –
+  kein LibreChat-Checkout mehr nötig. **`./start.sh`** fragt beim ersten Mal Anthropic-Key und Admin-Zugang,
+  erzeugt alle Geheimnisse, baut die Images, startet alles, erkennt das alte Portal auf Port 45012 und schaltet
+  nach Rückfrage um. **`./rollback.sh`** schaltet zurück.
+- Komplett hier durchgespielt: altes Portal (nachgestellt) auf 45012 → `start.sh` → altes gestoppt, neues
+  antwortet; nachgestellter Server-nginx mit TLS davor → im Browser Login-Formular → Chat → Admin-Bereich
+  (LibreChat holt die Login-Konfiguration direkt beim Server-nginx); Code-Ausführung; `rollback.sh` → altes
+  Portal wieder da → `start.sh` → wieder umgeschaltet; Update durch Entpacken über den Ordner; Backup → Benutzer
+  gelöscht → Restore → Login klappt wieder.
+- [GO-LIVE.md](GO-LIVE.md) entsprechend auf 5 kurze Schritte umgeschrieben.
+
 ### 19.10.2026 – Bild/Sprache/Video vorerst aus
 
 - Neue Einstellung `MEDIA_ENABLED` (Standard: aus). Claude bekommt dann nur Kontostand und 3D-Teile als

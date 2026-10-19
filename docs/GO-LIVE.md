@@ -1,191 +1,103 @@
 # Go-live: A-B Cloud AI Portal auf `ai.dev.a-b-cloud.de`
 
-Schritt-für-Schritt-Anleitung für den Umzug vom alten Portal auf LibreChat + Portal-Gateway
-(Plan: [`WEB-HOSTING-PLAN.md`](WEB-HOSTING-PLAN.md), Fortschritt: [`PORTAL-PROGRESS.md`](PORTAL-PROGRESS.md)).
-Alle Befehle als `root` auf dem Server (88.99.138.164). Dauer: ca. 1–2 Stunden plus Smoke-Test.
+Das neue Portal ist **ein Ordner** (`ai-portal-neu`) mit eigener Docker Compose und einem Startbefehl.
+Wie das alte Portal hört es auf `127.0.0.1:45012`; der nginx des Servers (TLS auf 443) leitet die Domain
+schon dorthin – er bleibt unverändert. `start.sh` stoppt das alte Portal und übernimmt den Port
+(ca. 1 Minute Ausfall); `rollback.sh` schaltet zurück.
 
-**Prinzip:** Das alte Portal (Compose mit App, SearXNG und eigenem nginx) nimmt auf `127.0.0.1:45012`
-HTTP an; der nginx des Servers macht TLS auf 443 und leitet dorthin weiter. Das neue Portal hört mit
-seinem eigenen nginx-Container (`portal-nginx`) auf **genau demselben Port**. Der Server-nginx bleibt
-unverändert – Umschalten = alte Compose stoppen, neue starten (ca. 1 Minute Ausfall), Rollback umgekehrt.
+Plan: [`WEB-HOSTING-PLAN.md`](WEB-HOSTING-PLAN.md) · Fortschritt: [`PORTAL-PROGRESS.md`](PORTAL-PROGRESS.md)
 
-> Platzhalter: `<ALT>` = Verzeichnis der alten Compose (siehe Schritt 0).
-
-## 0. Voraussetzungen
-
-- Docker Engine + **Docker Compose v2.24+** (`docker compose version`)
-- Anthropic-API-Key, Admin-Benutzername + Passwort (≥ 12 Zeichen)
-  (Bild/Sprache/Video über OpenRouter ist vorerst aus – Key nicht nötig)
-- Empfohlen: 8 vCPU / 16 GB RAM, ≥ 40 GB frei (Images ca. 6 GB): `nproc; free -h; df -h /`
-
-Kurz prüfen:
+## 1. Vorher kurz prüfen (2 Minuten)
 
 ```bash
-docker compose ls                                   # Verzeichnis des alten Portals → <ALT>
-grep -rln '45012' /etc/nginx/sites-enabled/         # Site-Datei des Server-nginx
+docker compose version                               # Docker Compose v2 ist da
+grep -rln '45012' /etc/nginx/sites-enabled/          # Site-Datei des Server-nginx
 grep -nE 'proxy_pass|client_max_body_size|X-Forwarded-For|proxy_buffering|proxy_read_timeout' \
   /etc/nginx/sites-enabled/<site-datei>
+df -h /                                              # mind. 20 GB frei
 ```
 
-Die Site muss `proxy_pass http://127.0.0.1:45012` haben und **`X-Forwarded-For`** setzen
-(sonst sehen die Rate-Limits nicht die echte IP). Fehlen `client_max_body_size 60M`,
-`proxy_buffering off` oder `proxy_read_timeout 600s` (Uploads, gestreamte Antworten), diese Zeilen
-aus [`portal/deploy/nginx/ai.dev.a-b-cloud.de.conf`](../portal/deploy/nginx/ai.dev.a-b-cloud.de.conf)
-ergänzen und `nginx -t && systemctl reload nginx` (schadet dem alten Portal nicht).
+Die Site muss `proxy_pass http://127.0.0.1:45012` haben und **`X-Forwarded-For`** setzen. Fehlen
+`client_max_body_size 60M`, `proxy_buffering off` oder `proxy_read_timeout 600s` (Uploads, gestreamte
+Antworten), die Zeilen aus `nginx/ai.dev.a-b-cloud.de.conf` (im Ordner) ergänzen und
+`nginx -t && systemctl reload nginx` – schadet dem alten Portal nicht.
 
-## 1. Altes Portal sichern
+Anthropic Console: **Websuche für die Organisation erlauben** und ein monatliches Ausgabenlimit setzen.
 
-```bash
-mkdir -p /root/old-portal
-cp -a /etc/nginx/sites-enabled/<site-datei> /root/old-portal/
-cd <ALT> && docker compose config > /root/old-portal/compose-resolved.yml
-# Daten des alten Portals (Volume app-data) als Archiv
-VOL=$(docker volume ls -q | grep 'app-data$'); echo "$VOL"     # genau ein Treffer, z. B. ai-portal_app-data
-docker run --rm -v "$VOL":/data:ro -v /root/old-portal:/backup alpine tar czf /backup/app-data.tgz -C /data .
-```
+## 2. Hochladen und starten
 
-Das alte Portal läuft weiter bis Schritt 7. Seine Konten und Chats werden **nicht** übernommen
-(andere Software); das Volume bleibt erhalten.
-
-## 2. Code holen
-
-Portal-Code als Archiv hochladen (ohne GitHub-Zugang auf dem Server), vom eigenen Rechner aus:
+Vom eigenen Rechner:
 
 ```bash
-scp portal-deploy.tar.gz root@88.99.138.164:/root/
+scp ai-portal-neu.tar.gz root@88.99.138.164:/root/
 ```
 
 Auf dem Server:
 
 ```bash
-mkdir -p /opt/portal && tar xzf /root/portal-deploy.tar.gz -C /opt/portal
-git clone --depth 1 --branch v0.8.8 https://github.com/danny-avila/LibreChat /opt/LibreChat
+tar xzf /root/ai-portal-neu.tar.gz -C /opt
+/opt/ai-portal-neu/start.sh
 ```
 
-(Alternative mit Git: `git clone --branch ccr-19153869-nd6ntm https://github.com/yorumainvalo0-crypto/Api /opt/portal`
-– privates Repository, braucht Deploy-Key oder Token.)
+`start.sh` …
+1. fragt beim ersten Mal **Anthropic-API-Key**, **Admin-Benutzername** und **Admin-Passwort**
+   (mind. 12 Zeichen) und erzeugt alle Geheimnisse (`librechat.env`, `portal-gateway.env`, `.env`, Rechte 600),
+2. baut die Portal-Images (beim ersten Mal 10–20 Minuten) und startet Datenbank, Chat, Gateway, Code-Runner,
+3. findet das alte Portal auf Port 45012 und fragt: **„Altes Portal jetzt stoppen und auf das neue umschalten?“**
+   → `ja` stoppt es (Container und Daten bleiben erhalten) und startet den Eingang des neuen,
+4. prüft, dass Chat und Portal antworten, und zeigt die Adressen.
 
-LibreChat **v0.8.8** ist die getestete Version (Image-Tag in der Override-Datei fest gepinnt).
+## 3. Erster Admin-Login
 
-## 3. Datenverzeichnisse
+1. `https://ai.dev.a-b-cloud.de/portal/admin/login` – Benutzername + Passwort aus Schritt 2.
+2. Danach das Passwort aus der Datei entfernen (wird nur beim allerersten Start gebraucht):
+   `cd /opt/ai-portal-neu && sed -i '/^PORTAL_ADMIN_PASSWORD=/d' portal-gateway.env && docker compose up -d portal-gateway`
+3. Passwort ändern: im Admin-Bereich auf deiner Benutzerseite (Karte „Passwort“).
 
-```bash
-mkdir -p /opt/portal-data/{media,code-work,code-store} /var/backups/portal
-chown 1000:1000 /opt/portal-data/media          # Gateway läuft als uid 1000
-chmod 700 /var/backups/portal
-```
+> Das Passwort ist der einzige Schutz des Admin-Bereichs: lang und nur hier verwenden. Nach 10 Fehlversuchen
+> ist der Account 15 Minuten gesperrt. Optional: zweiter Faktor mit `ADMIN_TOTP=true` in `portal-gateway.env`.
 
-Empfohlen: Code-Ausführungen auf ein eigenes, begrenztes Dateisystem legen, damit ein Programm
-nicht die ganze Platte füllen kann:
-
-```bash
-fallocate -l 20G /opt/portal-data/code-work.img
-mkfs.ext4 -q /opt/portal-data/code-work.img
-echo '/opt/portal-data/code-work.img /opt/portal-data/code-work ext4 loop,nodev,nosuid 0 2' >> /etc/fstab
-mount /opt/portal-data/code-work
-```
-
-## 4. Images bauen
-
-```bash
-bash /opt/portal/portal/deploy/scripts/build-images.sh    # sandbox, cad-sandbox, code-runner, gateway (:latest)
-```
-
-## 5. Konfiguration
-
-```bash
-cd /opt/LibreChat
-cp /opt/portal/portal/deploy/librechat.yaml .
-cp /opt/portal/portal/deploy/docker-compose.override.yml .
-cp -r /opt/portal/portal/deploy/skill .
-mkdir -p portal-nginx && cp /opt/portal/portal/deploy/nginx/portal.conf.template portal-nginx/
-
-# Schlüssel nicht in die Shell-History schreiben:
-read -rsp 'Anthropic-Key: ' ANTHROPIC_API_KEY; echo
-read -rsp 'Admin-Passwort: ' PORTAL_ADMIN_PASSWORD; echo
-export ANTHROPIC_API_KEY PORTAL_ADMIN_PASSWORD
-PORTAL_ADMIN_USERNAME=<admin> python3 /opt/portal/portal/deploy/scripts/setup-env.py
-```
-
-`setup-env.py` schreibt `.env` und `portal-gateway.env` (Rechte 600) mit frischen, zueinander
-passenden Geheimnissen und Port 45012. Es meldet, falls noch ein `REPLACE_ME` übrig ist.
-
-## 6. Starten (ohne Eingang) und prüfen
-
-Alles außer `portal-nginx` – das alte Portal belegt Port 45012 noch:
-
-```bash
-cd /opt/LibreChat
-docker compose up -d api portal-gateway code-runner admin-panel
-docker compose ps                    # Dienste "running", Gateway und Code-Runner "healthy"
-docker compose logs api | tail -20   # keine Fehler (MCP-Server "portal" verbunden)
-```
-
-## 7. Umschalten (ca. 1 Minute Ausfall)
-
-```bash
-cd <ALT> && docker compose stop                       # altes Portal (App, SearXNG, nginx) anhalten
-cd /opt/LibreChat && docker compose up -d portal-nginx  # neues Portal übernimmt 127.0.0.1:45012
-curl -s -o /dev/null -w '%{http_code}\n' https://ai.dev.a-b-cloud.de/health          # 200
-curl -s -o /dev/null -w '%{http_code}\n' https://ai.dev.a-b-cloud.de/portal/health   # 200
-```
-
-Server-nginx und TLS-Zertifikat bleiben, wie sie sind.
-
-## 8. Erster Admin-Login
-
-1. `https://ai.dev.a-b-cloud.de/portal/admin/login` öffnen, Benutzername + Passwort (aus Schritt 5).
-2. Danach das Passwort aus `portal-gateway.env` entfernen (wird nur beim allerersten Start gebraucht):
-   `sed -i '/^PORTAL_ADMIN_PASSWORD=/d' portal-gateway.env && docker compose up -d portal-gateway`
-3. Passwort ändern geht im Admin-Bereich auf deiner eigenen Benutzerseite (Karte „Passwort“).
-
-> Das Passwort ist der einzige Schutz des Admin-Bereichs: lang und nur hier verwenden.
-> Nach 10 Fehlversuchen ist der Account 15 Minuten gesperrt. Optional lässt sich ein zweiter Faktor
-> (Authenticator-App) mit `ADMIN_TOTP=true` in `portal-gateway.env` einschalten.
-
-## 9. Smoke-Test (ca. 15 Min.)
+## 4. Smoke-Test (ca. 15 Min.)
 
 - [ ] Gruppe anlegen, Einladung für 1 Person / 1 Stunde → QR mit dem Handy scannen, Benutzernamen wählen
 - [ ] Im Chat: Opus 5.5 / mittel ist vorausgewählt, Antwort kommt; Guthaben sinkt
 - [ ] PDF hochladen und zusammenfassen lassen; Excel-Datei erzeugen und herunterladen
 - [ ] „Wie ist das Wetter heute in Berlin?“ → Websuche, 0,01 USD im Dashboard (`/portal/admin/usage`)
 - [ ] „Halterung 60 × 40 × 10 mm mit zwei 8-mm-Löchern“ → 3D-Ansicht am Handy, STL-Download
-- [ ] Login-QR für die Testperson auf einem zweiten Gerät → gleiche Chats sichtbar
-- [ ] Von außen nicht erreichbar: `curl -m5 http://88.99.138.164:45012`, `:45443` (altes Portal), `:3080`, `:27017`, `:3000`
+- [ ] Benutzer mit Passwort anlegen → auf einem anderen Gerät mit Benutzername + Passwort anmelden
+- [ ] Von außen nicht erreichbar: `curl -m5 http://88.99.138.164:45012`, `:45443`, `:27017`
 - [ ] `curl -s -o /dev/null -w '%{http_code}' -X POST https://ai.dev.a-b-cloud.de/portal/mcp` → `404`
 
-## 10. Betrieb einrichten
+## 5. Betrieb einrichten
 
 ```bash
 crontab -e
-# Backup täglich 03:30 (beide Datenbanken, Uploads, Media, Konfiguration), 14 Tage aufbewahren
-30 3 * * * BACKUP_REMOTE=u123456@u123456.your-storagebox.de:portal-backups /opt/portal/portal/deploy/scripts/backup.sh >> /var/log/portal-backup.log 2>&1
-# Erreichbarkeit alle 5 Minuten, Alarm per ntfy o. ä.
-*/5 * * * * ALERT_URL=https://ntfy.sh/<geheimes-thema> /opt/portal/portal/deploy/scripts/healthcheck.sh >> /var/log/portal-health.log 2>&1
+# Backup täglich 03:30 (beide Datenbanken, Uploads, Dateien, Einstellungen), 14 Tage aufbewahren
+30 3 * * * /opt/ai-portal-neu/scripts/backup.sh >> /var/log/portal-backup.log 2>&1
+# Erreichbarkeit alle 5 Minuten, Alarm per ntfy o. ä. (optional ALERT_URL setzen)
+*/5 * * * * ALERT_URL=https://ntfy.sh/<geheimes-thema> /opt/ai-portal-neu/scripts/healthcheck.sh >> /var/log/portal-health.log 2>&1
 ```
 
-- Backup einmal von Hand starten und prüfen: `ls -lh /var/backups/portal`
-- Restore (getestet): `docker compose stop api portal-gateway && restore.sh <STAMP>` → `docker compose up -d`
-- **Anthropic Console:** monatliches Ausgabenlimit setzen; **Websuche für die Organisation erlauben**
-  (sonst lehnt die API Anfragen mit Websuche ab – im Smoke-Test „Wie ist das Wetter heute in Berlin?“ fragen).
-- **Bild/Sprache/Video später einschalten:** in `portal-gateway.env` `MEDIA_ENABLED=true` und
+- Backups liegen in `/var/backups/portal`; Kopie auf eine Storage Box mit
+  `BACKUP_REMOTE=u123456@u123456.your-storagebox.de:portal-backups` vor dem Befehl.
+- Restore: `docker compose stop api portal-gateway && scripts/restore.sh <STAMP>` → `docker compose up -d`.
+- Bild/Sprache/Video später einschalten: in `portal-gateway.env` `MEDIA_ENABLED=true` und
   `OPENROUTER_API_KEY=…` setzen, `docker compose up -d portal-gateway`; bei OpenRouter ein Key-Limit setzen.
 
-## 11. Altes Portal stoppen
-
-Ist nach dem Umschalten schon angehalten. Nach ein paar Tagen ohne Probleme:
-`cd <ALT> && docker compose down` (ohne `-v`, das Volume bleibt), Sicherung in `/root/old-portal`
-noch 30 Tage aufheben.
-
-## Rollback
+## Zurück zum alten Portal
 
 ```bash
-cd /opt/LibreChat && docker compose stop    # neues Portal anhalten, gibt Port 45012 frei (Daten bleiben)
-cd <ALT> && docker compose start            # altes Portal ist sofort wieder online
+/opt/ai-portal-neu/rollback.sh     # stoppt das neue, startet das alte (Daten beider bleiben)
+/opt/ai-portal-neu/start.sh        # später wieder umschalten
 ```
+
+Das alte Portal endgültig entfernen, wenn alles läuft (nach ein paar Tagen): im alten Ordner
+`docker compose down` (ohne `-v`, dann bleibt dessen Daten-Volume). Konten und Chats des alten Portals
+werden nicht übernommen (andere Software).
 
 ## Updates
 
-1. Neue LibreChat-Version zuerst im Test-Stack prüfen (`portal/test-stack`, alle E2E-Tests grün).
-2. Tag in `docker-compose.override.yml` ändern, Backup machen, `docker compose pull && docker compose up -d`.
-3. Portal-Code: `cd /opt/portal && git pull && bash portal/deploy/scripts/build-images.sh && cd /opt/LibreChat && docker compose up -d`.
+Neues `ai-portal-neu.tar.gz` hochladen, wieder nach `/opt` entpacken und `./start.sh` ausführen.
+Einstellungen (`librechat.env`, `portal-gateway.env`) und Daten (`data/`, `uploads/`, `images/`) bleiben.
+Neue LibreChat-Version: erst im Test-Stack prüfen (`portal/test-stack`, alle E2E-Tests grün), dann den
+Image-Tag in `docker-compose.yml` ändern.

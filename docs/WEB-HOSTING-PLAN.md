@@ -69,6 +69,10 @@ generieren und **technische 3D-Modelle (3D-Druck/CAD) mit 3D-Vorschau** erstelle
 
 **Ports:** Veröffentlicht wird nur `portal-nginx` auf `127.0.0.1:45012` – derselbe Port wie beim alten
 Portal, daher bleibt der Server-nginx unverändert und Umschalten/Rollback ist ein Compose-Stop/-Start.
+
+**Auslieferung:** ein Ordner `ai-portal-neu` (gebaut mit `portal/deploy/make-bundle.sh`): eigene
+`docker-compose.yml` (MongoDB, LibreChat, Gateway, Code-Runner, portal-nginx), Quellcode unter `src/`,
+`start.sh` (Ersteinrichtung, Images bauen, starten, altes Portal stoppen) und `rollback.sh`.
 LibreChat und Gateway sind nur im Docker-Netz erreichbar (Docker umgeht sonst `ufw`).
 
 ## 4. LibreChat (Chat, Modelle, Effort, Guthaben)
