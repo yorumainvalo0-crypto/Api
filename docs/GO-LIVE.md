@@ -26,17 +26,14 @@ Anthropic Console: **Websuche für die Organisation erlauben** und ein monatlich
 
 ## 2. Hochladen und starten
 
-Vom eigenen Rechner:
+Archiv in den Docker-Ordner hochladen (z. B. `~/docker/`, neben das alte `ai-portal`). Root ist nicht nötig,
+der Benutzer muss nur Docker benutzen dürfen (Gruppe `docker`). Auf dem Server:
 
 ```bash
-scp ai-portal-neu.tar.gz root@88.99.138.164:/root/
-```
-
-Auf dem Server:
-
-```bash
-tar xzf /root/ai-portal-neu.tar.gz -C /opt
-/opt/ai-portal-neu/start.sh
+cd ~/docker
+tar xzf ai-portal-neu.tar.gz          # legt den Ordner ai-portal-neu an
+cd ai-portal-neu
+./start.sh
 ```
 
 `start.sh` …
@@ -51,7 +48,7 @@ tar xzf /root/ai-portal-neu.tar.gz -C /opt
 
 1. `https://ai.dev.a-b-cloud.de/portal/admin/login` – Benutzername + Passwort aus Schritt 2.
 2. Danach das Passwort aus der Datei entfernen (wird nur beim allerersten Start gebraucht):
-   `cd /opt/ai-portal-neu && sed -i '/^PORTAL_ADMIN_PASSWORD=/d' portal-gateway.env && docker compose up -d portal-gateway`
+   `cd ~/docker/ai-portal-neu && sed -i '/^PORTAL_ADMIN_PASSWORD=/d' portal-gateway.env && docker compose up -d portal-gateway`
 3. Passwort ändern: im Admin-Bereich auf deiner Benutzerseite (Karte „Passwort“).
 
 > Das Passwort ist der einzige Schutz des Admin-Bereichs: lang und nur hier verwenden. Nach 10 Fehlversuchen
@@ -73,12 +70,12 @@ tar xzf /root/ai-portal-neu.tar.gz -C /opt
 ```bash
 crontab -e
 # Backup täglich 03:30 (beide Datenbanken, Uploads, Dateien, Einstellungen), 14 Tage aufbewahren
-30 3 * * * /opt/ai-portal-neu/scripts/backup.sh >> /var/log/portal-backup.log 2>&1
+30 3 * * * $HOME/docker/ai-portal-neu/scripts/backup.sh >> $HOME/portal-backup.log 2>&1
 # Erreichbarkeit alle 5 Minuten, Alarm per ntfy o. ä. (optional ALERT_URL setzen)
-*/5 * * * * ALERT_URL=https://ntfy.sh/<geheimes-thema> /opt/ai-portal-neu/scripts/healthcheck.sh >> /var/log/portal-health.log 2>&1
+*/5 * * * * ALERT_URL=https://ntfy.sh/<geheimes-thema> $HOME/docker/ai-portal-neu/scripts/healthcheck.sh >> $HOME/portal-health.log 2>&1
 ```
 
-- Backups liegen in `/var/backups/portal`; Kopie auf eine Storage Box mit
+- Backups liegen in `~/backups/ai-portal` (als root: `/var/backups/portal`); Kopie auf eine Storage Box mit
   `BACKUP_REMOTE=u123456@u123456.your-storagebox.de:portal-backups` vor dem Befehl.
 - Restore: `docker compose stop api portal-gateway && scripts/restore.sh <STAMP>` → `docker compose up -d`.
 - Bild/Sprache/Video später einschalten: in `portal-gateway.env` `MEDIA_ENABLED=true` und
@@ -87,8 +84,8 @@ crontab -e
 ## Zurück zum alten Portal
 
 ```bash
-/opt/ai-portal-neu/rollback.sh     # stoppt das neue, startet das alte (Daten beider bleiben)
-/opt/ai-portal-neu/start.sh        # später wieder umschalten
+~/docker/ai-portal-neu/rollback.sh     # stoppt das neue, startet das alte (Daten beider bleiben)
+~/docker/ai-portal-neu/start.sh        # später wieder umschalten
 ```
 
 Das alte Portal endgültig entfernen, wenn alles läuft (nach ein paar Tagen): im alten Ordner
@@ -97,7 +94,7 @@ werden nicht übernommen (andere Software).
 
 ## Updates
 
-Neues `ai-portal-neu.tar.gz` hochladen, wieder nach `/opt` entpacken und `./start.sh` ausführen.
+Neues `ai-portal-neu.tar.gz` hochladen, im selben Docker-Ordner wieder entpacken und `./start.sh` ausführen.
 Einstellungen (`librechat.env`, `portal-gateway.env`) und Daten (`data/`, `uploads/`, `images/`) bleiben.
 Neue LibreChat-Version: erst im Test-Stack prüfen (`portal/test-stack`, alle E2E-Tests grün), dann den
 Image-Tag in `docker-compose.yml` ändern.

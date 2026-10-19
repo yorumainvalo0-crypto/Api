@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
 # Daily portal backup: both MongoDB databases (LibreChat + portal), uploaded and generated
 # files, and the configuration. Restore with restore.sh.
-# Cron example: 30 3 * * * /opt/ai-portal-neu/scripts/backup.sh >> /var/log/portal-backup.log 2>&1
+# Cron example: 30 3 * * * $HOME/docker/ai-portal-neu/scripts/backup.sh >> $HOME/portal-backup.log 2>&1
 set -euo pipefail
 
 PORTAL_DIR="${PORTAL_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
-BACKUP_DIR="${BACKUP_DIR:-/var/backups/portal}"
+# Without root /var/backups is not writable: keep the backups in the home folder
+if [ "$(id -u)" = 0 ]; then BACKUP_DIR="${BACKUP_DIR:-/var/backups/portal}"; else BACKUP_DIR="${BACKUP_DIR:-$HOME/backups/ai-portal}"; fi
 KEEP_DAYS="${KEEP_DAYS:-14}"
 # Optional off-site copy, e.g. "u123456@u123456.your-storagebox.de:portal-backups" (SSH port 23)
 BACKUP_REMOTE="${BACKUP_REMOTE:-}"

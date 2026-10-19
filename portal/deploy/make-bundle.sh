@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Builds the upload folder for the server: everything in portal/deploy plus the gateway and code
 # runner sources under src/. Usage: portal/deploy/make-bundle.sh [OUT.tar.gz]
-# On the server: tar xzf ai-portal-neu.tar.gz -C /opt && sudo /opt/ai-portal-neu/start.sh
+# On the server: cd ~/docker && tar xzf ai-portal-neu.tar.gz && ai-portal-neu/start.sh
 set -euo pipefail
 deploy="$(cd "$(dirname "$0")" && pwd)"
 repo="$(cd "$deploy/../.." && pwd)"

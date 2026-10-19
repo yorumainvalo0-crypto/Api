@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Checks that the portal answers and all containers run; alerts once per incident.
-# Cron example: */5 * * * * /opt/ai-portal-neu/scripts/healthcheck.sh >> /var/log/portal-health.log 2>&1
+# Cron example: */5 * * * * $HOME/docker/ai-portal-neu/scripts/healthcheck.sh >> $HOME/portal-health.log 2>&1
 # Optional alert: ALERT_URL=https://ntfy.sh/<your-topic> (any URL accepting a POSTed text message)
 set -uo pipefail
 

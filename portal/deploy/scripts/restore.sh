@@ -6,7 +6,8 @@ set -euo pipefail
 
 STAMP="${1:?usage: restore.sh <STAMP> [--yes]}"
 PORTAL_DIR="${PORTAL_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
-BACKUP_DIR="${BACKUP_DIR:-/var/backups/portal}"
+# Without root /var/backups is not writable: keep the backups in the home folder
+if [ "$(id -u)" = 0 ]; then BACKUP_DIR="${BACKUP_DIR:-/var/backups/portal}"; else BACKUP_DIR="${BACKUP_DIR:-$HOME/backups/ai-portal}"; fi
 RESTORE_CONFIG="${RESTORE_CONFIG:-false}"
 
 cd "$BACKUP_DIR"

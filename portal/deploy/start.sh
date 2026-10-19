@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Installs, updates and starts the A-B Cloud AI Portal in this folder – one command:
-#   sudo ./start.sh            (asks for the Anthropic key and the admin login on the first run)
-#   sudo ./start.sh --yes      (also switches over from the old portal without asking)
+#   ./start.sh            (asks for the Anthropic key and the admin login on the first run)
+#   ./start.sh --yes      (also switches over from the old portal without asking)
+# Needs Docker rights (root or the docker group), not root itself.
 # First run: writes librechat.env / portal-gateway.env / .env with fresh secrets. Every run: builds the
 # portal images, starts everything and takes over port 45012 (stops the old portal there if asked).
 # Undo the switch-over with ./rollback.sh.
@@ -47,7 +48,10 @@ if [ "$(id -u)" = 0 ]; then
   chown 1000:1000 librechat.env
   chown -R 1000:1000 data/media uploads images logs
 else
-  chmod -R a+rwX data/media uploads images logs
+  # Only the folders: files inside belong to the containers after the first start
+  chmod a+rwx data/media uploads images logs 2>/dev/null || true
+  # The chat container (uid 1000) reads librechat.env; without root it cannot be handed over
+  [ "$(id -u)" = 1000 ] || chmod 644 librechat.env
 fi
 
 # --- 3. Images ---
