@@ -5,11 +5,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends nodejs fonts-dejavu-core zip unzip file \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt /tmp/requirements.txt
-# Optional extra CA bundle for builds behind a TLS-inspecting proxy
-RUN --mount=type=secret,id=ca,required=false \
-    if [ -f /run/secrets/ca ]; then export PIP_CERT=/run/secrets/ca; fi; \
-    pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt
+# Optional extra CA bundle for builds behind a TLS-inspecting proxy: put build-ca.pem into the build
+# context. Plain COPY/RUN only, so the classic builder works too (servers without buildx)
+COPY requirements.txt build-ca.pe[m] /tmp/
+RUN if [ -f /tmp/build-ca.pem ]; then export PIP_CERT=/tmp/build-ca.pem; fi; \
+    pip install --no-cache-dir -r /tmp/requirements.txt && rm -f /tmp/requirements.txt /tmp/build-ca.pem
 
 RUN useradd --uid 1000 --create-home sandbox && mkdir -p /mnt/data && chown sandbox /mnt/data
 USER sandbox

@@ -1,10 +1,9 @@
-# syntax=docker/dockerfile:1.7
 FROM mirror.gcr.io/library/node:22-alpine AS build
 WORKDIR /app
-COPY package.json package-lock.json .npmrc ./
-# Optional extra CA bundle for builds behind a TLS-inspecting proxy
-RUN --mount=type=secret,id=ca,required=false \
-    if [ -f /run/secrets/ca ]; then export NODE_EXTRA_CA_CERTS=/run/secrets/ca; fi; \
+# Optional extra CA bundle for builds behind a TLS-inspecting proxy: put build-ca.pem into the build
+# context. Plain COPY/RUN only, so the classic builder works too (servers without buildx)
+COPY package.json package-lock.json .npmrc build-ca.pe[m] ./
+RUN if [ -f build-ca.pem ]; then export NODE_EXTRA_CA_CERTS="$PWD/build-ca.pem"; fi; \
     npm ci --no-audit --no-fund
 COPY tsconfig.json tsconfig.build.json ./
 COPY src ./src

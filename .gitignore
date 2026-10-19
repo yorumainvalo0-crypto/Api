@@ -17,3 +17,5 @@ portal/test-stack/test.env
 portal/test-stack/data/
 portal/**/node_modules/
 portal/test-stack/gateway.env
+# Local proxy CA for image builds (see the Dockerfiles), never committed
+portal/**/build-ca.pem

@@ -2,10 +2,11 @@
 # through the Docker socket.
 FROM mirror.gcr.io/library/python:3.12-slim-bookworm
 WORKDIR /app
-COPY requirements.txt .
-RUN --mount=type=secret,id=ca,required=false \
-    if [ -f /run/secrets/ca ]; then export PIP_CERT=/run/secrets/ca; fi; \
-    pip install --no-cache-dir -r requirements.txt
+# Optional extra CA bundle for builds behind a TLS-inspecting proxy: put build-ca.pem into the build
+# context. Plain COPY/RUN only, so the classic builder works too (servers without buildx)
+COPY requirements.txt build-ca.pe[m] /tmp/
+RUN if [ -f /tmp/build-ca.pem ]; then export PIP_CERT=/tmp/build-ca.pem; fi; \
+    pip install --no-cache-dir -r /tmp/requirements.txt && rm -f /tmp/requirements.txt /tmp/build-ca.pem
 COPY runner ./runner
 ENV STORE_DIR=/data/store
 EXPOSE 8000

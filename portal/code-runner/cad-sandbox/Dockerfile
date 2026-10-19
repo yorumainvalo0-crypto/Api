@@ -6,10 +6,11 @@ RUN apt-get update \
     && apt-get install -y --no-install-recommends libgl1 libglu1-mesa libxrender1 libxext6 fonts-dejavu-core \
     && rm -rf /var/lib/apt/lists/*
 
-COPY requirements.txt /tmp/requirements.txt
-RUN --mount=type=secret,id=ca,required=false \
-    if [ -f /run/secrets/ca ]; then export PIP_CERT=/run/secrets/ca; fi; \
-    pip install --no-cache-dir -r /tmp/requirements.txt && rm /tmp/requirements.txt
+# Optional extra CA bundle for builds behind a TLS-inspecting proxy: put build-ca.pem into the build
+# context. Plain COPY/RUN only, so the classic builder works too (servers without buildx)
+COPY requirements.txt build-ca.pe[m] /tmp/
+RUN if [ -f /tmp/build-ca.pem ]; then export PIP_CERT=/tmp/build-ca.pem; fi; \
+    pip install --no-cache-dir -r /tmp/requirements.txt && rm -f /tmp/requirements.txt /tmp/build-ca.pem
 
 # Warm up the CAD kernel import once at build time (and fail the build if it is broken)
 RUN python3 -c "import build123d, trimesh; print('cad ok')"
