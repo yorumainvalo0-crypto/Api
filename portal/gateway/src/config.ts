@@ -42,6 +42,11 @@ const schema = z.object({
   JOIN_RATE_LIMIT: z.coerce.number().int().positive().default(20),
   /** Code runner (CAD sandbox) inside the Docker network */
   CODE_RUNNER_URL: z.url().default('http://code-runner:8000'),
+  /** Second factor (authenticator app) for admins; off by default: admins log in with their password */
+  ADMIN_TOTP: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
   /** Set to false only for local http testing */
   COOKIE_SECURE: z
     .enum(['true', 'false'])

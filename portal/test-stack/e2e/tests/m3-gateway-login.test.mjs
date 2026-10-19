@@ -1,4 +1,4 @@
-// M3: login through the gateway – admin with TOTP, login QR codes, devices, blocking.
+// M3: login through the gateway – admin with password, login QR codes, passwords, devices, blocking.
 import assert from 'node:assert/strict'
 import { after, before, test } from 'node:test'
 import {
@@ -37,7 +37,7 @@ test('without a device session LibreChat sends visitors to the gateway, which as
   await context.close()
 })
 
-test('admin logs in with password and TOTP and is an admin in LibreChat too', async () => {
+test('admin logs in with the password and is an admin in LibreChat too', async () => {
   await adminLogin(admin.page)
   await admin.page.goto(`${PUBLIC_URL}/`)
   await admin.page.waitForURL(/\/c\//, { timeout: 30_000 })
@@ -66,6 +66,32 @@ test('a login QR logs a new person straight into the chat with the chosen userna
   await thief.page.getByText('schon benutzt').waitFor()
   await thief.context.close()
   await phone.context.close()
+})
+
+test('a person with a password from the admin logs in on the chat page without a QR code', async () => {
+  const username = `paul${Date.now() % 100000}`
+  await admin.page.goto(`${PUBLIC_URL}/portal/admin`)
+  await admin.page.fill('#username', username)
+  await admin.page.fill('#password', 'sonnen-blume-42')
+  await admin.page.click('form[action="/portal/admin/users"] button[type="submit"]')
+  await admin.page.waitForURL(/\/portal\/admin\/users\//)
+  await admin.page.getByText('Anmeldung mit Benutzername + Passwort ist möglich.').waitFor()
+
+  const laptop = await newDevice(browser)
+  await laptop.page.goto(`${PUBLIC_URL}/`)
+  await laptop.page.getByText('Du bist auf diesem Gerät nicht angemeldet.').waitFor({ timeout: 30_000 })
+  await laptop.page.fill('#username', username)
+  await laptop.page.fill('#password', 'falsch-falsch')
+  await laptop.page.click('button[type="submit"]')
+  await laptop.page.getByText('Benutzername oder Passwort falsch.').waitFor()
+  await laptop.page.fill('#username', username)
+  await laptop.page.fill('#password', 'sonnen-blume-42')
+  await laptop.page.click('button[type="submit"]')
+  await laptop.page.waitForURL(/\/c\//, { timeout: 30_000 })
+  await acceptTerms(laptop.page)
+  const user = await waitFor(() => withMongo((lc) => lc.collection('users').findOne({ username })), { message: 'LibreChat user' })
+  assert.equal(user.email, `${username}@${USER_EMAIL_DOMAIN}`)
+  await laptop.context.close()
 })
 
 test('a second device sees the same chats', async () => {

@@ -12,7 +12,6 @@ Alle Befehle als `root` auf dem Server (88.99.138.164). Dauer: ca. 1–2 Stunden
 - `inventory.sh` wurde ausgeführt, Ausgabe liegt vor (Ports, alte App, freier Speicher):
   `sudo bash portal/deploy/scripts/inventory.sh > /root/inventory.txt`
 - Anthropic-API-Key, OpenRouter-Key (nur Bild/Sprache/Video), Admin-Benutzername + Passwort (≥ 12 Zeichen)
-- Authenticator-App auf dem Handy (Zwei-Faktor-Login für den Admin)
 - Empfohlen: 8 vCPU / 16 GB RAM, ≥ 40 GB frei (Images ca. 6 GB)
 
 ## 1. Altes Portal sichern
@@ -101,14 +100,16 @@ nginx -t && systemctl reload nginx
 Die Sicherung des alten Site-Files bleibt in `/root/old-portal` (nicht in `sites-enabled`, sonst lädt
 nginx beide). Das TLS-Zertifikat (Let's Encrypt) wird weiterverwendet.
 
-## 8. Erster Admin-Login – sofort
+## 8. Erster Admin-Login
 
-1. `https://ai.dev.a-b-cloud.de/portal/admin/login` öffnen, Benutzername + Passwort.
-2. QR-Code mit der Authenticator-App scannen, 6-stelligen Code eingeben.
-3. Danach das Passwort aus `portal-gateway.env` entfernen (wird nur beim allerersten Start gebraucht):
+1. `https://ai.dev.a-b-cloud.de/portal/admin/login` öffnen, Benutzername + Passwort (aus Schritt 5).
+2. Danach das Passwort aus `portal-gateway.env` entfernen (wird nur beim allerersten Start gebraucht):
    `sed -i '/^PORTAL_ADMIN_PASSWORD=/d' portal-gateway.env && docker compose up -d portal-gateway`
+3. Passwort ändern geht im Admin-Bereich auf deiner eigenen Benutzerseite (Karte „Passwort“).
 
-> Bis zur TOTP-Einrichtung reicht das Passwort allein – daher Schritt 8 direkt nach Schritt 7.
+> Das Passwort ist der einzige Schutz des Admin-Bereichs: lang und nur hier verwenden.
+> Nach 10 Fehlversuchen ist der Account 15 Minuten gesperrt. Optional lässt sich ein zweiter Faktor
+> (Authenticator-App) mit `ADMIN_TOTP=true` in `portal-gateway.env` einschalten.
 
 ## 9. Smoke-Test (ca. 15 Min.)
 

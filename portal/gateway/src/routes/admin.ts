@@ -4,7 +4,7 @@ import type { PortalUser } from '../db.js'
 import { listDevices, revokeAllDevices, revokeDevice, type SessionContext } from '../devices.js'
 import { html, page, type SafeHtml } from '../html.js'
 import { createLoginLink, listLoginLinks, revokeLoginLink } from '../login-links.js'
-import { UserError, audit, createUser } from '../users.js'
+import { UserError, audit, createUser, minPasswordLength, setPassword, suggestPassword } from '../users.js'
 import {
   type AppContext,
   checkCsrf,
@@ -99,13 +99,14 @@ export function registerAdminRoutes(app: FastifyInstance, ctx: AppContext): void
             <form method="post" action="${base}/admin/users" class="card">
               ${csrf}
               <h2 style="margin-top:0">Benutzer direkt anlegen</h2>
-              <p class="muted">Normalerweise treten Personen über einen Einladungs-QR bei. Hier legst du einzelne Accounts an
-                und erzeugst danach einen Login-QR.</p>
+              <p class="muted">Normalerweise treten Personen über einen Einladungs-QR bei. Hier legst du einzelne Accounts an:
+                mit Passwort (Anmeldung mit Benutzername + Passwort) und/oder danach mit einem Login-QR.</p>
               ${error ? html`<p class="error">${error}</p>` : ''}
               <div class="row">
                 <div><label for="username">Benutzername</label><input id="username" name="username" required></div>
                 <div><label for="startBudgetUsd">Startbudget (USD)</label><input id="startBudgetUsd" name="startBudgetUsd" type="number" min="0" step="0.01" value="5"></div>
                 <div><label for="monthlyBudgetUsd">Monatsbudget (USD)</label><input id="monthlyBudgetUsd" name="monthlyBudgetUsd" type="number" min="0" step="0.01" value="5"></div>
+                <div><label for="password">Passwort (leer = nur QR-Code)</label><input id="password" name="password" autocomplete="off" minlength="10" maxlength="200" placeholder="z. B. ${suggestPassword()}"></div>
               </div>
               <button type="submit">Anlegen</button>
             </form>
@@ -140,8 +141,9 @@ export function registerAdminRoutes(app: FastifyInstance, ctx: AppContext): void
           username: field(req.body, 'username'),
           startBudgetUsd: Math.max(0, Number(field(req.body, 'startBudgetUsd')) || 0),
           monthlyBudgetUsd: Math.max(0, Number(field(req.body, 'monthlyBudgetUsd')) || 0),
+          password: field(req.body, 'password'),
         })
-        await audit(db, session.user.username, 'user.created', user._id, { username: user.username })
+        await audit(db, session.user.username, 'user.created', user._id, { username: user.username, password: !!user.passwordHash })
         return reply.redirect(`${base}/admin/users/${user._id}`)
       } catch (error) {
         if (error instanceof UserError) {
@@ -152,7 +154,7 @@ export function registerAdminRoutes(app: FastifyInstance, ctx: AppContext): void
     }),
   )
 
-  app.get<{ Params: { id: string }; Querystring: { qr?: string } }>(
+  app.get<{ Params: { id: string }; Querystring: { qr?: string; error?: string } }>(
     `${base}/admin/users/:id`,
     adminRoute(ctx, async (req, reply, session) => {
       const user = await db.col.users.findOne({ _id: req.params.id })
@@ -217,6 +219,30 @@ export function registerAdminRoutes(app: FastifyInstance, ctx: AppContext): void
               }
             </div>
 
+            <div class="card" id="password-card">
+              <h2 style="margin-top:0">Passwort</h2>
+              ${req.query.error ? html`<p class="error">${req.query.error}</p>` : ''}
+              <p>${user.passwordHash ? 'Anmeldung mit Benutzername + Passwort ist möglich.' : 'Kein Passwort gesetzt – Anmeldung nur per QR-Code.'}
+                <span class="muted">Anmeldeseite: ${config.PUBLIC_URL}${base}/login</span></p>
+              <div class="row">
+                <form method="post" action="${base}/admin/users/${user._id}/password">
+                  ${csrf}
+                  <label for="new-password">${user.passwordHash ? 'Neues Passwort' : 'Passwort setzen'} (mind. ${minPasswordLength(user.role)} Zeichen)</label>
+                  <input id="new-password" name="password" autocomplete="off" minlength="${minPasswordLength(user.role)}" maxlength="200" required value="${suggestPassword()}">
+                  <button type="submit">Speichern</button>
+                </form>
+                ${
+                  user.passwordHash && user.role !== 'admin'
+                    ? html`<form method="post" action="${base}/admin/users/${user._id}/password/remove">
+                        ${csrf}
+                        <label>&nbsp;</label>
+                        <button type="submit" class="secondary">Passwort entfernen</button>
+                      </form>`
+                    : ''
+                }
+              </div>
+            </div>
+
             <form method="post" action="${base}/admin/users/${user._id}/login-links" class="card">
               ${csrf}
               <h2 style="margin-top:0">Neuen Login-QR erstellen</h2>
@@ -276,6 +302,38 @@ export function registerAdminRoutes(app: FastifyInstance, ctx: AppContext): void
           { nav: adminNav(base, 'users', session, csrf) },
         ),
       )
+    }),
+  )
+
+  app.post<{ Params: { id: string } }>(
+    `${base}/admin/users/:id/password`,
+    adminRoute(ctx, async (req, reply, session) => {
+      const user = await db.col.users.findOne({ _id: req.params.id })
+      if (!user) return reply.code(404).send('Benutzer nicht gefunden')
+      try {
+        await setPassword(db, user, field(req.body, 'password'))
+      } catch (error) {
+        if (!(error instanceof UserError)) throw error
+        return reply.redirect(`${base}/admin/users/${user._id}?error=${encodeURIComponent(error.message)}#password-card`)
+      }
+      await audit(db, session.user.username, 'user.password.set', user._id)
+      return reply.redirect(`${base}/admin/users/${user._id}#password-card`)
+    }),
+  )
+
+  app.post<{ Params: { id: string } }>(
+    `${base}/admin/users/:id/password/remove`,
+    adminRoute(ctx, async (req, reply, session) => {
+      const user = await db.col.users.findOne({ _id: req.params.id })
+      if (!user) return reply.code(404).send('Benutzer nicht gefunden')
+      try {
+        await setPassword(db, user, null)
+      } catch (error) {
+        if (!(error instanceof UserError)) throw error
+        return reply.redirect(`${base}/admin/users/${user._id}?error=${encodeURIComponent(error.message)}#password-card`)
+      }
+      await audit(db, session.user.username, 'user.password.removed', user._id)
+      return reply.redirect(`${base}/admin/users/${user._id}#password-card`)
     }),
   )
 

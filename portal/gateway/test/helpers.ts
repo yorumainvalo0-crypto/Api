@@ -69,7 +69,7 @@ export function form(data: Record<string, string>): { payload: string; headers: 
   }
 }
 
-/** Logs the bootstrap admin in (password + TOTP enrollment) and returns the cookie jar. */
+/** Logs the bootstrap admin in (password; TOTP too when ADMIN_TOTP is on) and returns the cookie jar. */
 export async function loginAdmin(env: TestEnv): Promise<Record<string, string>> {
   const jar: Record<string, string> = {}
   const step1 = await env.app.inject({
@@ -78,17 +78,19 @@ export async function loginAdmin(env: TestEnv): Promise<Record<string, string>> 
     ...form({ username: ADMIN_USERNAME, password: ADMIN_PASSWORD, returnTo: '' }),
   })
   cookiesFrom(step1, jar)
-  // Each TOTP code works once; tests log in more often than every 30 s, so forget the last one
-  const admin = await env.db.col.users.findOneAndUpdate({ username: ADMIN_USERNAME }, { $unset: { totpLastStep: '' } })
-  const secret = admin!.totpSecret ?? admin!.totpPendingSecret!
-  const step2 = await env.app.inject({
-    method: 'POST',
-    url: '/portal/admin/totp',
-    ...form({ code: totpCode(secret), returnTo: '' }),
-    headers: { ...form({}).headers, cookie: cookieHeader(jar) },
-  })
-  cookiesFrom(step2, jar)
-  if (!jar.portal_sid) throw new Error(`admin login failed: ${step2.statusCode} ${step2.body.slice(0, 200)}`)
+  if (!jar.portal_sid && step1.headers.location?.startsWith('/portal/admin/totp')) {
+    // Each TOTP code works once; tests log in more often than every 30 s, so forget the last one
+    const admin = await env.db.col.users.findOneAndUpdate({ username: ADMIN_USERNAME }, { $unset: { totpLastStep: '' } })
+    const secret = admin!.totpSecret ?? admin!.totpPendingSecret!
+    const step2 = await env.app.inject({
+      method: 'POST',
+      url: '/portal/admin/totp',
+      ...form({ code: totpCode(secret), returnTo: '' }),
+      headers: { ...form({}).headers, cookie: cookieHeader(jar) },
+    })
+    cookiesFrom(step2, jar)
+  }
+  if (!jar.portal_sid) throw new Error(`admin login failed: ${step1.statusCode} ${step1.body.slice(0, 200)}`)
   return jar
 }
 

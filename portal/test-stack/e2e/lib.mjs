@@ -91,20 +91,22 @@ export function totp(secret, timeMs = Date.now()) {
   return String((digest.readUInt32BE(offset) & 0x7fffffff) % 1_000_000).padStart(6, '0')
 }
 
-/** Admin login in the gateway: password, then TOTP (enrolls on first login). */
+/** Admin login in the gateway: password (plus TOTP when the gateway runs with ADMIN_TOTP=true). */
 export async function adminLogin(page) {
   await page.goto(`${PUBLIC_URL}/portal/admin/login`)
   await page.fill('#username', ADMIN.username)
   await page.fill('#password', ADMIN.password)
   await page.click('button[type="submit"]')
-  await page.waitForURL(/\/portal\/admin\/totp/)
-  // Each TOTP code works once; tests log in more often than every 30 s, so forget the last one
-  const admin = await withMongo((_lc, portal) =>
-    portal.collection('users').findOneAndUpdate({ username: ADMIN.username }, { $unset: { totpLastStep: '' } }),
-  )
-  await page.fill('#code', totp(admin.totpSecret ?? admin.totpPendingSecret))
-  await page.click('button[type="submit"]')
-  await page.waitForURL(`${PUBLIC_URL}/portal/admin`)
+  await page.waitForURL(/\/portal\/admin(\/totp.*)?$/)
+  if (page.url().includes('/admin/totp')) {
+    // Each TOTP code works once; tests log in more often than every 30 s, so forget the last one
+    const admin = await withMongo((_lc, portal) =>
+      portal.collection('users').findOneAndUpdate({ username: ADMIN.username }, { $unset: { totpLastStep: '' } }),
+    )
+    await page.fill('#code', totp(admin.totpSecret ?? admin.totpPendingSecret))
+    await page.click('button[type="submit"]')
+    await page.waitForURL(`${PUBLIC_URL}/portal/admin`)
+  }
 }
 
 /** Creates a user in the admin area and returns a fresh login link for it. */

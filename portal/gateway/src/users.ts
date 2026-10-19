@@ -1,4 +1,4 @@
-import { randomUUID } from 'node:crypto'
+import { randomInt, randomUUID } from 'node:crypto'
 import type { Database, PortalUser, Role } from './db.js'
 import { hashPassword } from './security.js'
 
@@ -31,6 +31,35 @@ export function normalizeUsername(input: string): string {
   return username
 }
 
+/** Admins guard budgets and the dashboard with their password alone, so they need a longer one */
+export function minPasswordLength(role: Role): number {
+  return role === 'admin' ? 12 : 10
+}
+
+export function checkPassword(password: string, role: Role): void {
+  const min = minPasswordLength(role)
+  if (password.length < min) throw new UserError(`Das Passwort braucht mindestens ${min} Zeichen.`)
+  if (password.length > 200) throw new UserError('Das Passwort ist zu lang.')
+}
+
+/** Readable random password for the admin to hand out, e.g. "k7mq-p9xr-w3hn" (about 62 bits) */
+export function suggestPassword(): string {
+  const alphabet = 'abcdefghjkmnpqrstuvwxyz23456789'
+  const group = () => Array.from({ length: 4 }, () => alphabet[randomInt(alphabet.length)]).join('')
+  return [group(), group(), group()].join('-')
+}
+
+/** Sets or (with null) removes a user's password; QR logins keep working either way. */
+export async function setPassword(db: Database, user: PortalUser, password: string | null): Promise<void> {
+  if (password === null) {
+    if (user.role === 'admin') throw new UserError('Admins brauchen ein Passwort.')
+    await db.col.users.updateOne({ _id: user._id }, { $set: { passwordHash: null } })
+    return
+  }
+  checkPassword(password, user.role)
+  await db.col.users.updateOne({ _id: user._id }, { $set: { passwordHash: await hashPassword(password) } })
+}
+
 export interface NewUser {
   username: string
   role?: Role
@@ -44,6 +73,7 @@ export interface NewUser {
 /** Creates a portal user; fails with UserError when the username is taken. */
 export async function createUser(db: Database, input: NewUser): Promise<PortalUser> {
   const username = normalizeUsername(input.username)
+  if (input.password) checkPassword(input.password, input.role ?? 'user')
   const user: PortalUser = {
     _id: randomUUID(),
     username,

@@ -32,6 +32,16 @@ MongoDB und Test-Doubles für Anthropic/OpenRouter). Auf dem Hetzner-Server ist 
 
 ## Log
 
+### 19.10.2026 – Anmeldung mit Passwort (ohne Authenticator-App)
+
+- **Admin-Login nur mit Passwort** (keine Authenticator-App nötig). Schutz: Sperre nach 10 Fehlversuchen
+  für 15 Minuten, zusätzlich Rate-Limit pro IP. Zweiter Faktor lässt sich später mit `ADMIN_TOTP=true` einschalten.
+- **Benutzer mit Passwort:** Beim Anlegen im Admin-Bereich optional ein Passwort vergeben (ein zufälliger
+  Vorschlag wird angezeigt); auf der Benutzerseite ändern oder entfernen. Wer auf diesem Gerät nicht
+  angemeldet ist, sieht im Chat jetzt ein Anmeldeformular (Benutzername + Passwort) – QR-Codes gehen weiterhin.
+- **Tests:** 65 Gateway- + 18 Runner- + 30 Browser-Tests grün (neu: Passwort-Login im Browser mit falschem und
+  richtigem Passwort, Sperre nach Fehlversuchen, Passwort ändern/entfernen).
+
 ### 19.10.2026 – Websuche über Anthropic
 
 - Claude kann bei Bedarf im Web suchen (Anthropic-Websuche, in allen drei Modellen an).

@@ -73,7 +73,7 @@ describe('login links', () => {
 })
 
 describe('admin login', () => {
-  it('requires password and TOTP; admin pages are closed without both', async () => {
+  it('logs admins in with the password alone by default; admin pages stay closed without it', async () => {
     const anonymous = await env.app.inject({ url: '/portal/admin' })
     expect(anonymous.statusCode).toBe(302)
     expect(anonymous.headers.location).toBe('/portal/admin/login')
@@ -84,39 +84,33 @@ describe('admin login', () => {
       ...form({ username: ADMIN_USERNAME, password: 'wrong-password', returnTo: '' }),
     })
     expect(wrong.statusCode).toBe(401)
-
-    // Password alone gives no session
-    const jar: Record<string, string> = {}
-    const step1 = await env.app.inject({
-      method: 'POST',
-      url: '/portal/admin/login',
-      ...form({ username: ADMIN_USERNAME, password: ADMIN_PASSWORD, returnTo: '' }),
-    })
-    cookiesFrom(step1, jar)
-    expect(jar.portal_sid).toBeUndefined()
-    const badCode = await env.app.inject({
-      method: 'POST',
-      url: '/portal/admin/totp',
-      payload: 'code=000000&returnTo=',
-      headers: { 'content-type': 'application/x-www-form-urlencoded', cookie: cookieHeader(jar) },
-    })
-    expect(badCode.statusCode).toBe(401)
+    expect(wrong.cookies.find((c) => c.name === 'portal_sid')).toBeUndefined()
 
     const adminJar = await loginAdmin(env)
     const page = await env.app.inject({ url: '/portal/admin', headers: { cookie: cookieHeader(adminJar) } })
     expect(page.statusCode).toBe(200)
     expect(page.body).toContain('Benutzer direkt anlegen')
     const admin = await env.db.col.users.findOne({ username: ADMIN_USERNAME })
-    expect(admin!.totpSecret).toBeTruthy()
+    expect(admin!.totpSecret).toBeNull()
   })
 
-  it('accepts each TOTP code only once and locks the login after repeated wrong codes', async () => {
-    // Own instance: this test alone sends more TOTP posts than the default rate limit allows
+  it('locks an account for 15 minutes after 10 wrong passwords', async () => {
     const own = await createTestEnv({ ADMIN_LOGIN_RATE_LIMIT: '100' })
-    await loginAdmin(own)
-    const admin = await own.db.col.users.findOne({ username: ADMIN_USERNAME })
-    const usedCode = totpCode(admin!.totpSecret!, admin!.totpLastStep! * 30_000)
+    try {
+      const attempt = (password: string) =>
+        own.app.inject({ method: 'POST', url: '/portal/admin/login', ...form({ username: ADMIN_USERNAME, password, returnTo: '' }) })
+      for (let i = 0; i < 10; i++) expect((await attempt('wrong-password')).statusCode).toBe(401)
+      const locked = await attempt(ADMIN_PASSWORD)
+      expect(locked.statusCode).toBe(429)
+      expect(locked.body).toContain('15 Minuten')
+    } finally {
+      await own.close()
+    }
+  })
 
+  it('with ADMIN_TOTP on: password plus a one-time code, locked after repeated wrong codes', async () => {
+    // Own instance: this test alone sends more TOTP posts than the default rate limit allows
+    const own = await createTestEnv({ ADMIN_LOGIN_RATE_LIMIT: '100', ADMIN_TOTP: 'true' })
     const passwordStep = async () => {
       const jar: Record<string, string> = {}
       cookiesFrom(
@@ -136,6 +130,16 @@ describe('admin login', () => {
         ...form({ code, returnTo: '' }),
         headers: { ...form({}).headers, cookie: cookieHeader(jar) },
       })
+
+    // Password alone gives no session
+    const first = await passwordStep()
+    expect(first.portal_sid).toBeUndefined()
+    expect((await sendCode(first, '000000')).statusCode).toBe(401)
+
+    await loginAdmin(own)
+    const admin = await own.db.col.users.findOne({ username: ADMIN_USERNAME })
+    expect(admin!.totpSecret).toBeTruthy()
+    const usedCode = totpCode(admin!.totpSecret!, admin!.totpLastStep! * 30_000)
 
     const jar = await passwordStep()
     const replay = await sendCode(jar, usedCode)
@@ -217,6 +221,54 @@ describe('admin login', () => {
     // The token is not stored in clear text
     const links = await env.db.col.loginLinks.find({ userId: maria!._id }).toArray()
     expect(JSON.stringify(links)).not.toContain(url.split('/').pop())
+  })
+})
+
+describe('users with a password', () => {
+  it('the admin gives a person a password; they log in with it and land in the chat', async () => {
+    const jar = await loginAdmin(env)
+    const csrf = csrfFrom((await env.app.inject({ url: '/portal/admin', headers: { cookie: cookieHeader(jar) } })).body)
+    const post = (url: string, data: Record<string, string>) =>
+      env.app.inject({ method: 'POST', url, ...form({ _csrf: csrf, ...data }), headers: { ...form({}).headers, cookie: cookieHeader(jar) } })
+
+    const tooShort = await post('/portal/admin/users', { username: 'kurz', password: 'abc' })
+    expect(decodeURIComponent(String(tooShort.headers.location))).toContain('mindestens 10 Zeichen')
+    expect(await env.db.col.users.findOne({ username: 'kurz' })).toBeNull()
+
+    const created = await post('/portal/admin/users', { username: 'paula', password: 'sonnen-blume-42', startBudgetUsd: '1', monthlyBudgetUsd: '0' })
+    expect(created.statusCode).toBe(302)
+    const paula = await env.db.col.users.findOne({ username: 'paula' })
+    expect(paula!.passwordHash).toMatch(/^scrypt\$/)
+
+    const login = (password: string, url = '/portal/login') =>
+      env.app.inject({ method: 'POST', url, ...form({ username: 'Paula', password, returnTo: '' }) })
+    expect((await login('falsch-falsch')).statusCode).toBe(401)
+    const ok = await login('sonnen-blume-42')
+    expect(ok.statusCode).toBe(302)
+    expect(ok.headers.location).toBe('http://localhost:3080/')
+    const userJar = cookiesFrom(ok)
+    expect((await env.app.inject({ url: '/portal/admin', headers: { cookie: cookieHeader(userJar) } })).statusCode).toBe(302)
+    // The admin login does not accept normal users
+    expect((await login('sonnen-blume-42', '/portal/admin/login')).statusCode).toBe(401)
+
+    // Change and remove: the old password stops working, QR login is unaffected
+    await post(`/portal/admin/users/${paula!._id}/password`, { password: 'neues-passwort-7' })
+    expect((await login('sonnen-blume-42')).statusCode).toBe(401)
+    expect((await login('neues-passwort-7')).statusCode).toBe(302)
+    await post(`/portal/admin/users/${paula!._id}/password/remove`, {})
+    expect((await login('neues-passwort-7')).statusCode).toBe(401)
+
+    // Admins keep a password
+    const admin = await env.db.col.users.findOne({ username: ADMIN_USERNAME })
+    const removeAdmin = await post(`/portal/admin/users/${admin!._id}/password/remove`, {})
+    expect(decodeURIComponent(String(removeAdmin.headers.location))).toContain('Admins brauchen ein Passwort')
+  })
+
+  it('a person without a device session can log in with the password on the chat login page', async () => {
+    const res = await env.app.inject({ url: '/portal/login' })
+    expect(res.statusCode).toBe(200)
+    expect(res.body).toContain('name="password"')
+    expect(res.body).toContain('QR-Code')
   })
 })
 

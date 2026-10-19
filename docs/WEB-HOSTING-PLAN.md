@@ -185,8 +185,12 @@ Keine E-Mail-Adresse nötig: Das Gateway liefert LibreChat eine technische Adres
   Einstellungen** liegen auf dem Server und sind auf jedem Gerät da.
 - Liste „Geräte“ pro Benutzer mit „abmelden“; Login-Links jederzeit widerrufbar.
 - Optional (später): Benutzer kann selbst „Weiteres Gerät verbinden“ (QR aus der eigenen Sitzung).
-- Admin-Login: Benutzername + Passwort + TOTP (Authenticator-App); bekommt Admin-Rolle auch in LibreChat
+- Admin-Login: Benutzername + Passwort (Entscheidung: keine Authenticator-App; TOTP optional per
+  `ADMIN_TOTP=true`); Sperre nach 10 Fehlversuchen für 15 Min.; bekommt Admin-Rolle auch in LibreChat
   (`OPENID_ADMIN_ROLE`).
+- **Benutzer mit Passwort:** Der Admin kann beim Anlegen oder später ein Passwort vergeben (Vorschlag wird
+  erzeugt, mind. 10 Zeichen). Anmeldung dann mit Benutzername + Passwort auf der Anmeldeseite, die LibreChat
+  ohne Gerätesitzung zeigt (`/portal/login`); der Login-QR funktioniert weiterhin.
 
 ### 6.4 Budgets in USD (A5)
 
@@ -317,7 +321,7 @@ Tokens (Einladung, Login) sind 128 Bit zufällig und werden **nur gehasht** gesp
 - CAD-Runner ohne Netzwerkzugang, mit Ressourcen- und Zeitlimits (§6.7).
 - Umgesetzt in M8 (nach Sicherheitsprüfung des Codes):
   - Client-IP nur aus dem von nginx angehängten Eintrag (gefälschte `X-Forwarded-For` hebeln Rate-Limits nicht aus).
-  - TOTP-Codes nur einmal gültig; nach 5 falschen Codes 15 Min. Sperre.
+  - Passwort-Login: Sperre pro Account nach 10 Fehlversuchen (15 Min.); bei aktiviertem TOTP jeder Code nur einmal.
   - Login-Links werden erst per Knopfdruck eingelöst (Link-Vorschauen in Messengern verbrauchen sie nicht).
   - Abmelden mit CSRF-Schutz beendet die Gerätesitzung serverseitig.
   - 3D-Viewer: Modelldaten aus der Sandbox werden streng geprüft, Seite mit Content-Security-Policy.

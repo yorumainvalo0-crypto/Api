@@ -1,6 +1,7 @@
-import type { FastifyInstance, FastifyReply } from 'fastify'
+import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
 import type Provider from 'oidc-provider'
 import { errors } from 'oidc-provider'
+import type { PortalUser } from '../db.js'
 import { SESSION_COOKIE, createDeviceSession, deviceLabel, revokeDevice } from '../devices.js'
 import { html, page } from '../html.js'
 import { checkLoginLink, redeemLoginLink } from '../login-links.js'
@@ -10,9 +11,11 @@ import { type AppContext, checkCsrf, cookieOptions, currentSession, field, qrSvg
 
 const PENDING_COOKIE = 'portal_pending'
 const PENDING_TTL_MS = 10 * 60_000
-/** Wrong TOTP codes (after a correct password) before the account waits TOTP_LOCK_MS */
+/** Wrong TOTP codes (after a correct password) before the account waits LOCK_MS */
 const TOTP_MAX_FAILURES = 5
-const TOTP_LOCK_MS = 15 * 60_000
+/** Wrong passwords per account before it waits LOCK_MS */
+const PASSWORD_MAX_FAILURES = 10
+const LOCK_MS = 15 * 60_000
 
 const REASONS: Record<string, string> = {
   invalid: 'Dieser Login-Code ist ungültig.',
@@ -76,46 +79,82 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext, provid
     return reply.redirect(`${config.PUBLIC_URL}/`, 303)
   })
 
-  // --- Admin login (password, then TOTP) ---
-  app.get<{ Querystring: { returnTo?: string } }>(`${base}/admin/login`, async (req, reply) => {
-    return sendHtml(reply, adminLoginPage(req.query.returnTo ?? '', ''))
-  })
-
-  function adminLoginPage(returnTo: string, error: string): string {
+  // --- Password login: people with a password set by the admin, and admins ---
+  function loginPage(admin: boolean, returnTo: string, error: string): string {
+    const title = admin ? 'Admin-Login' : 'Anmelden'
     return page(
-      'Admin-Login',
-      html`<h1>Admin-Login</h1>
-        <form method="post" class="card">
+      title,
+      html`<h1>${admin ? 'Admin-Login' : 'A-B Cloud AI Portal'}</h1>
+        <form method="post" action="${base}/${admin ? 'admin/login' : 'login'}" class="card">
           ${error ? html`<p class="error">${error}</p>` : ''}
           <input type="hidden" name="returnTo" value="${returnTo}">
           <label for="username">Benutzername</label>
-          <input id="username" name="username" autocomplete="username" required>
+          <input id="username" name="username" autocomplete="username" autocapitalize="none" required>
           <label for="password">Passwort</label>
           <input id="password" name="password" type="password" autocomplete="current-password" required>
-          <button type="submit">Weiter</button>
-        </form>`,
+          <button type="submit">Anmelden</button>
+        </form>
+        ${admin ? '' : html`<p class="muted">Ohne Passwort: QR-Code aus deiner Einladung scannen oder den Admin um einen Login-QR-Code bitten.</p>`}`,
       { narrow: true },
     )
   }
 
-  app.post(`${base}/admin/login`, { config: { rateLimit: { max: config.ADMIN_LOGIN_RATE_LIMIT, timeWindow: '5 minutes' } } }, async (req, reply) => {
+  app.get<{ Querystring: { returnTo?: string } }>(`${base}/login`, async (req, reply) => {
+    return sendHtml(reply, loginPage(false, req.query.returnTo ?? '', ''))
+  })
+
+  app.get<{ Querystring: { returnTo?: string } }>(`${base}/admin/login`, async (req, reply) => {
+    return sendHtml(reply, loginPage(true, req.query.returnTo ?? '', ''))
+  })
+
+  async function passwordLogin(req: FastifyRequest, reply: FastifyReply, admin: boolean) {
     const username = field(req.body, 'username').trim().toLowerCase()
     const password = field(req.body, 'password')
     const returnTo = field(req.body, 'returnTo')
-    const user = await db.col.users.findOne({ username, role: 'admin', status: 'active' })
+    // Per account, on top of the per-IP rate limit: the password may be the only factor
+    const failures = await db.col.audit.countDocuments({
+      actor: username,
+      action: 'login.failed',
+      at: { $gt: new Date(Date.now() - LOCK_MS) },
+    })
+    if (failures >= PASSWORD_MAX_FAILURES) {
+      return sendHtml(reply, loginPage(admin, returnTo, 'Zu viele Fehlversuche. Bitte 15 Minuten warten.'), 429)
+    }
+    const user = await db.col.users.findOne({ username, status: 'active', ...(admin ? { role: 'admin' as const } : {}) })
     const ok = !!user?.passwordHash && (await verifyPassword(password, user.passwordHash))
     if (!user || !ok) {
-      await audit(db, username || '?', 'admin.login.failed', null)
-      return sendHtml(reply, adminLoginPage(returnTo, 'Benutzername oder Passwort falsch.'), 401)
+      await audit(db, username || '?', 'login.failed', null, { admin })
+      return sendHtml(reply, loginPage(admin, returnTo, 'Benutzername oder Passwort falsch.'), 401)
     }
-    if (!user.totpSecret && !user.totpPendingSecret) {
-      await db.col.users.updateOne({ _id: user._id }, { $set: { totpPendingSecret: generateTotpSecret() } })
+    if (user.role === 'admin' && config.ADMIN_TOTP) {
+      if (!user.totpSecret && !user.totpPendingSecret) {
+        await db.col.users.updateOne({ _id: user._id }, { $set: { totpPendingSecret: generateTotpSecret() } })
+      }
+      const expires = Date.now() + PENDING_TTL_MS
+      const value = `${user._id}.${expires}`
+      reply.setCookie(PENDING_COOKIE, `${value}.${sign(config.PORTAL_SECRET, `pending:${value}`)}`, cookieOptions(config, PENDING_TTL_MS / 1000))
+      return reply.redirect(`${base}/admin/totp${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`)
     }
-    const expires = Date.now() + PENDING_TTL_MS
-    const value = `${user._id}.${expires}`
-    reply.setCookie(PENDING_COOKIE, `${value}.${sign(config.PORTAL_SECRET, `pending:${value}`)}`, cookieOptions(config, PENDING_TTL_MS / 1000))
-    return reply.redirect(`${base}/admin/totp${returnTo ? `?returnTo=${encodeURIComponent(returnTo)}` : ''}`)
-  })
+    await startSession(req, reply, user)
+    await audit(db, user.username, user.role === 'admin' ? 'admin.login' : 'login.password', user._id)
+    return reply.redirect(safeReturnTo(base, returnTo) ?? (admin ? `${base}/admin` : `${config.PUBLIC_URL}/`))
+  }
+
+  /** New device session; admins get the admin verification right away (password, and TOTP if enabled). */
+  async function startSession(req: FastifyRequest, reply: FastifyReply, user: PortalUser) {
+    const userAgent = req.headers['user-agent'] ?? ''
+    const { token, device } = await createDeviceSession(db, user, {
+      label: `${user.role === 'admin' ? 'Admin: ' : ''}${deviceLabel(userAgent)}`,
+      userAgent,
+      days: config.DEVICE_SESSION_DAYS,
+    })
+    if (user.role === 'admin') await db.col.devices.updateOne({ _id: device._id }, { $set: { adminVerifiedAt: new Date() } })
+    reply.setCookie(SESSION_COOKIE, token, cookieOptions(config, sessionMaxAge))
+  }
+
+  const loginLimit = { config: { rateLimit: { max: config.ADMIN_LOGIN_RATE_LIMIT, timeWindow: '5 minutes' } } }
+  app.post(`${base}/login`, loginLimit, (req, reply) => passwordLogin(req, reply, false))
+  app.post(`${base}/admin/login`, loginLimit, (req, reply) => passwordLogin(req, reply, true))
 
   async function pendingAdmin(cookie: string | undefined) {
     const [userId, expires, signature] = (cookie ?? '').split('.')
@@ -155,7 +194,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext, provid
     return sendHtml(reply, await totpPage(user._id, req.query.returnTo ?? '', ''))
   })
 
-  app.post(`${base}/admin/totp`, { config: { rateLimit: { max: config.ADMIN_LOGIN_RATE_LIMIT, timeWindow: '5 minutes' } } }, async (req, reply) => {
+  app.post(`${base}/admin/totp`, loginLimit, async (req, reply) => {
     const user = await pendingAdmin(req.cookies[PENDING_COOKIE])
     if (!user) return reply.redirect(`${base}/admin/login`)
     const code = field(req.body, 'code')
@@ -163,11 +202,11 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext, provid
     const failures = await db.col.audit.countDocuments({
       target: user._id,
       action: 'admin.totp.failed',
-      at: { $gt: new Date(Date.now() - TOTP_LOCK_MS) },
+      at: { $gt: new Date(Date.now() - LOCK_MS) },
     })
     if (failures >= TOTP_MAX_FAILURES) {
       reply.clearCookie(PENDING_COOKIE, { path: base })
-      return sendHtml(reply, adminLoginPage('', 'Zu viele falsche Codes. Bitte 15 Minuten warten.'), 429)
+      return sendHtml(reply, loginPage(true, '', 'Zu viele falsche Codes. Bitte 15 Minuten warten.'), 429)
     }
     const secret = user.totpSecret ?? user.totpPendingSecret
     const step = secret ? totpStep(secret, code) : null
@@ -184,16 +223,9 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext, provid
       await audit(db, user.username, 'admin.totp.failed', user._id)
       return sendHtml(reply, await totpPage(user._id, returnTo, 'Code falsch, abgelaufen oder schon benutzt.'), 401)
     }
-    const userAgent = req.headers['user-agent'] ?? ''
-    const { token, device } = await createDeviceSession(db, user, {
-      label: `Admin: ${deviceLabel(userAgent)}`,
-      userAgent,
-      days: config.DEVICE_SESSION_DAYS,
-    })
-    await db.col.devices.updateOne({ _id: device._id }, { $set: { adminVerifiedAt: new Date() } })
+    await startSession(req, reply, user)
     await audit(db, user.username, 'admin.login', user._id)
     reply.clearCookie(PENDING_COOKIE, { path: base })
-    reply.setCookie(SESSION_COOKIE, token, cookieOptions(config, sessionMaxAge))
     return reply.redirect(safeReturnTo(base, returnTo) ?? `${base}/admin`)
   })
 
@@ -226,9 +258,17 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext, provid
           html`<h1>A-B Cloud AI Portal</h1>
             <div class="card">
               <p><strong>Du bist auf diesem Gerät nicht angemeldet.</strong></p>
-              <p>Scanne den QR-Code aus deiner Einladung oder bitte den Admin um einen Login-QR-Code.</p>
+              <p>Scanne den QR-Code aus deiner Einladung, bitte den Admin um einen Login-QR-Code
+                oder melde dich mit Benutzername und Passwort an.</p>
             </div>
-            <p class="muted"><a href="${base}/admin/login?returnTo=${encodeURIComponent(returnTo)}">Admin-Login</a></p>`,
+            <form method="post" action="${base}/login" class="card">
+              <input type="hidden" name="returnTo" value="${returnTo}">
+              <label for="username">Benutzername</label>
+              <input id="username" name="username" autocomplete="username" autocapitalize="none" required>
+              <label for="password">Passwort</label>
+              <input id="password" name="password" type="password" autocomplete="current-password" required>
+              <button type="submit">Anmelden</button>
+            </form>`,
           { narrow: true },
         ),
         401,
