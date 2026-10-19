@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Checks that the portal answers and all containers run; alerts once per incident.
-# Cron example: */5 * * * * /opt/portal/portal/deploy/scripts/healthcheck.sh >> /var/log/portal-health.log 2>&1
+# Cron example: */5 * * * * /opt/ai-portal-neu/scripts/healthcheck.sh >> /var/log/portal-health.log 2>&1
 # Optional alert: ALERT_URL=https://ntfy.sh/<your-topic> (any URL accepting a POSTed text message)
 set -uo pipefail
 
 DOMAIN="${DOMAIN:-ai.dev.a-b-cloud.de}"
-LIBRECHAT_DIR="${LIBRECHAT_DIR:-/opt/LibreChat}"
+PORTAL_DIR="${PORTAL_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 ALERT_URL="${ALERT_URL:-}"
 STATE_FILE="${STATE_FILE:-/var/tmp/portal-health.state}"
 SERVICES="${SERVICES:-portal-nginx api mongodb portal-gateway code-runner}"
@@ -16,7 +16,7 @@ for path in /health /portal/health; do
   [ "$code" = "200" ] || problems+=("https://$DOMAIN$path -> HTTP $code")
 done
 for service in $SERVICES; do
-  state=$(docker compose --project-directory "$LIBRECHAT_DIR" ps --format '{{.State}}' "$service" 2>/dev/null || true)
+  state=$(docker compose --project-directory "$PORTAL_DIR" ps --format '{{.State}}' "$service" 2>/dev/null || true)
   [ "$state" = "running" ] || problems+=("container $service: ${state:-missing}")
 done
 # The internal tool endpoint must never be reachable from outside

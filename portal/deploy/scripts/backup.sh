@@ -1,13 +1,11 @@
 #!/usr/bin/env bash
 # Daily portal backup: both MongoDB databases (LibreChat + portal), uploaded and generated
 # files, and the configuration. Restore with restore.sh.
-# Cron example: 30 3 * * * /opt/portal/portal/deploy/scripts/backup.sh >> /var/log/portal-backup.log 2>&1
+# Cron example: 30 3 * * * /opt/ai-portal-neu/scripts/backup.sh >> /var/log/portal-backup.log 2>&1
 set -euo pipefail
 
-LIBRECHAT_DIR="${LIBRECHAT_DIR:-/opt/LibreChat}"
-PORTAL_DATA_DIR="${PORTAL_DATA_DIR:-/opt/portal-data}"
+PORTAL_DIR="${PORTAL_DIR:-$(cd "$(dirname "$0")/.." && pwd)}"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/portal}"
-MONGO_CONTAINER="${MONGO_CONTAINER:-chat-mongodb}"
 KEEP_DAYS="${KEEP_DAYS:-14}"
 # Optional off-site copy, e.g. "u123456@u123456.your-storagebox.de:portal-backups" (SSH port 23)
 BACKUP_REMOTE="${BACKUP_REMOTE:-}"
@@ -19,26 +17,22 @@ mkdir -p "$BACKUP_DIR"
 
 # Accounts, chats, balances, transactions (LibreChat) and logins, invites, budgets, CAD models (portal)
 for db in LibreChat portal; do
-  docker exec "$MONGO_CONTAINER" mongodump --db "$db" --archive --gzip --quiet \
+  docker compose --project-directory "$PORTAL_DIR" exec -T mongodb mongodump --db "$db" --archive --gzip --quiet \
     > "$BACKUP_DIR/mongo-$db-$STAMP.archive.gz"
 done
 
 # Files and configuration; .env files hold secrets, so the backup directory stays private
 files=()
-for item in uploads images .env portal-gateway.env librechat.yaml docker-compose.override.yml skill portal-nginx; do
-  if [ -e "$LIBRECHAT_DIR/$item" ]; then
-    files+=("librechat/$item")
+for item in uploads images data/media librechat.env portal-gateway.env .env librechat.yaml docker-compose.yml skill nginx; do
+  if [ -e "$PORTAL_DIR/$item" ]; then
+    files+=("portal/$item")
   else
-    echo "warning: $LIBRECHAT_DIR/$item missing, skipped" >&2
+    echo "warning: $PORTAL_DIR/$item missing, skipped" >&2
   fi
 done
 staging="$(mktemp -d)"
 trap 'rm -rf "$staging"' EXIT
-ln -s "$LIBRECHAT_DIR" "$staging/librechat"
-if [ -d "$PORTAL_DATA_DIR/media" ]; then
-  ln -s "$PORTAL_DATA_DIR/media" "$staging/media"
-  files+=("media/")
-fi
+ln -s "$PORTAL_DIR" "$staging/portal"
 tar -czhf "$BACKUP_DIR/files-$STAMP.tar.gz" -C "$staging" "${files[@]}"
 
 # Integrity check of what was just written

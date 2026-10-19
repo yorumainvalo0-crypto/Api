@@ -1,0 +1,10 @@
+# Created by ./start.sh when the folder runs as the server installation
+librechat.env
+portal-gateway.env
+.env
+.old-portal
+data/
+uploads/
+images/
+logs/
+src/

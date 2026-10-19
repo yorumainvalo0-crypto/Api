@@ -1,0 +1,84 @@
+# A-B Cloud AI Portal: LibreChat + portal gateway + code runner behind one nginx container.
+# Start, update and switch over with ./start.sh (it builds the portal images and writes the env files).
+# Like the old portal, only portal-nginx is published: 127.0.0.1:PORTAL_HTTP_PORT (45012), where the
+# server's nginx (TLS on 443) forwards ai.dev.a-b-cloud.de to. Values in ${…} come from ./.env.
+# Not "ai-portal": that may already be the old portal's project name
+name: librechat-portal
+
+services:
+  mongodb:
+    image: mirror.gcr.io/library/mongo:8.0.20
+    restart: always
+    command: mongod --noauth
+    volumes:
+      - ./data/mongo:/data/db
+
+  # Chat UI (pinned to the version tested in portal/test-stack; update only after re-running the tests)
+  api:
+    image: registry.librechat.ai/librechat-ai/librechat:v0.8.8
+    restart: always
+    depends_on: [mongodb, portal-gateway, code-runner]
+    env_file: librechat.env
+    environment:
+      - HOST=0.0.0.0
+      - MONGO_URI=mongodb://mongodb:27017/LibreChat
+    networks: [default, code]
+    volumes:
+      - type: bind
+        source: ./librechat.env
+        target: /app/.env
+      - type: bind
+        source: ./librechat.yaml
+        target: /app/librechat.yaml
+      - ./skill:/app/skill:ro
+      - ./uploads:/app/uploads
+      - ./images:/app/client/public/images
+      - ./logs:/app/logs
+
+  # Login (OIDC), invites, budgets, usage dashboard and MCP tools
+  portal-gateway:
+    image: portal-gateway:latest
+    restart: always
+    depends_on: [mongodb]
+    env_file: portal-gateway.env
+    networks: [default, code]
+    volumes:
+      # Generated files (uid 1000 must be able to write)
+      - ./data/media:/data/media
+
+  # Code execution and file output (LibreChat Code API). Starts one network-less sandbox
+  # container per execution through the Docker socket; only LibreChat and the gateway reach it.
+  code-runner:
+    image: portal-code-runner:latest
+    restart: always
+    environment:
+      - WORK_DIR=${CODE_WORK_DIR:?run ./start.sh}
+      - SANDBOX_IMAGE=portal-sandbox:latest
+      - CAD_SANDBOX_IMAGE=portal-cad-sandbox:latest
+      - EXEC_TIMEOUT_SECONDS=120
+      - EXEC_MEMORY=1g
+      - MAX_PARALLEL=4
+      - RETENTION_DAYS=7
+    networks: [code]
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Same path inside and outside: sandbox containers bind-mount sub-directories of it
+      - ${CODE_WORK_DIR:?run ./start.sh}:${CODE_WORK_DIR:?run ./start.sh}
+      - ./data/code-store:/data/store
+
+  # Entry point: splits the traffic from the server's nginx between LibreChat and the gateway.
+  # Docker publishes ports past ufw, so bind to localhost only.
+  portal-nginx:
+    image: mirror.gcr.io/library/nginx:1.27-alpine
+    restart: always
+    depends_on: [api, portal-gateway]
+    environment:
+      - PUBLIC_HOST=${PORTAL_DOMAIN:-ai.dev.a-b-cloud.de}
+    volumes:
+      - ./nginx/portal.conf.template:/etc/nginx/templates/default.conf.template:ro
+    ports:
+      - "127.0.0.1:${PORTAL_HTTP_PORT:-45012}:80"
+
+networks:
+  code:
+    internal: true
