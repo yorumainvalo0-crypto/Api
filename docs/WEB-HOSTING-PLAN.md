@@ -362,4 +362,4 @@ M3–M5 ersetzen dann CLI durch QR-Codes, M6–M7 runden ab.
 5. Websuche für Claude gewünscht? (verursacht Zusatzkosten pro Suche)
 6. 3D-Druck: Welcher Drucker/Slicer (z. B. Bambu, Prusa) – für passende Toleranzen und Bauraum-Prüfung im CAD-Skill?
 
-Konfigurationsvorlagen: [`deploy/librechat/`](../deploy/librechat/)
+Code und Konfiguration: [`portal/`](../portal/) · Fortschritt: [`PORTAL-PROGRESS.md`](PORTAL-PROGRESS.md)
