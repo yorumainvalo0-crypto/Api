@@ -137,7 +137,7 @@ export async function connectDatabase(config: Pick<Config, 'MONGO_URI' | 'PORTAL
     oidc: portal.collection('oidc'),
     settings: portal.collection('settings'),
   }
-  await ensureIndexes(col)
+  await ensureIndexes(col, portal)
   return {
     client,
     portal,
@@ -147,7 +147,7 @@ export async function connectDatabase(config: Pick<Config, 'MONGO_URI' | 'PORTAL
   }
 }
 
-async function ensureIndexes(col: Collections): Promise<void> {
+async function ensureIndexes(col: Collections, portal: Db): Promise<void> {
   await Promise.all([
     col.users.createIndex({ username: 1 }, { unique: true }),
     col.users.createIndex({ librechatUserId: 1 }, { sparse: true }),
@@ -159,6 +159,7 @@ async function ensureIndexes(col: Collections): Promise<void> {
     col.invites.createIndex({ tokenHash: 1 }, { unique: true }),
     col.invites.createIndex({ groupId: 1 }),
     col.audit.createIndex({ at: -1 }),
+    portal.collection('budgetEvents').createIndex({ userId: 1, at: -1 }),
     col.oidc.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
     col.oidc.createIndex({ model: 1, uid: 1 }, { sparse: true }),
     col.oidc.createIndex({ model: 1, grantId: 1 }, { sparse: true }),

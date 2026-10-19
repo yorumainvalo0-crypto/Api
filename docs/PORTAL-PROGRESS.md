@@ -14,8 +14,8 @@ MongoDB und Test-Doubles für Anthropic/OpenRouter). Auf dem Hetzner-Server ist 
 | M2      | Code-Ausführung + Datei-Skills                       | ✅ fertig       | ✅ 11 + 2 |
 | M3      | Gateway-Kern: Login, Admin, Login-QR, Geräte         | ✅ fertig       | ✅ 25 + 5 |
 | M4      | Gruppen + Einladungs-QR                              | ✅ fertig       | ✅ 6 + 4 |
-| M5      | Budgets in USD                                       | ⏳ in Arbeit    |      |
-| M6      | Admin-Dashboard                                      | offen          |      |
+| M5      | Budgets in USD                                       | ✅ fertig       | ✅ 6 + 3 |
+| M6      | Admin-Dashboard                                      | ⏳ in Arbeit    |      |
 | M7      | Media (Bild/Sprache/Video via OpenRouter)            | offen          |      |
 | M7b     | CAD-Dienst + 3D-Viewer                               | offen          |      |
 | M8      | Härtung, Backup/Restore, Go-live-Anleitung           | offen          |      |
@@ -28,6 +28,24 @@ MongoDB und Test-Doubles für Anthropic/OpenRouter). Auf dem Hetzner-Server ist 
   **nicht** vom Guthaben ab. Bis zur Entscheidung: in der Anthropic Console für den Workspace abschalten.
 
 ## Log
+
+### 19.10.2026 – M5 fertig (Budgets in US-Dollar)
+
+- **Startbudget** aus der Einladung (oder beim direkten Anlegen) wird beim ersten Login automatisch
+  gebucht – innerhalb von ~2 Sekunden, genau einmal.
+- **Monatsbudget:** am 1. jedes Monats um 0:00 Uhr (deutsche Zeit) wird das Guthaben auf das
+  Monatsbudget gesetzt (kein Übertrag). Monatsbudget 0 = kein automatisches Aufladen.
+- **Admin, Benutzerseite → Budget:** verbleibendes Guthaben, Monatsbudget, nächstes Zurücksetzen,
+  **„Limit erweitern“** (+ USD, sofort wirksam), Monatsbudget ändern, Verlauf aller Buchungen.
+  Benutzerliste zeigt das Guthaben jeder Person.
+- Buchungen laufen genau wie LibreChats eigenes Aufladen (Transaktion + Guthaben) → LibreChat zeigt
+  das Guthaben korrekt an und blockiert bei 0.
+- **Tests:** 6 neue Gateway-Tests (einmalige Startbuchung trotz paralleler Läufe, Aufladen vor/nach
+  erstem Login, Monatsreset ohne Übertrag und nur einmal, Monatswechsel mit Sommer-/Winterzeit und
+  Jahreswechsel, Admin-Formulare) + 3 Browser-Tests (Startbudget sofort nutzbar und korrekt
+  abgebucht; ohne Budget blockiert → Admin lädt auf → geht sofort; Claude nennt per `konto_status`
+  das eigene Guthaben). **Gesamt: 37 Gateway- + 19 Browser-Tests grün.**
+
 
 ### 19.10.2026 – M4 fertig (Gruppen + Einladungs-QR)
 

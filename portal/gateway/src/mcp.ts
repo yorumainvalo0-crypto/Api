@@ -4,6 +4,7 @@ import type { CallToolResult } from '@modelcontextprotocol/sdk/types.js'
 import type { FastifyInstance } from 'fastify'
 import { ObjectId } from 'mongodb'
 import type { z } from 'zod'
+import { applyStartBudget } from './budgets.js'
 import type { Config } from './config.js'
 import type { Database, PortalUser } from './db.js'
 import { safeEqual } from './security.js'
@@ -43,8 +44,12 @@ export async function resolveToolUser(db: Database, librechatUserId: string): Pr
   const librechatUser = await db.librechat.collection('users').findOne({ _id: id }, { projection: { openidId: 1 } })
   const sub = librechatUser?.openidId
   if (typeof sub !== 'string') return null
-  const user = await db.col.users.findOne({ _id: sub, status: 'active' })
-  if (user) await db.col.users.updateOne({ _id: user._id }, { $set: { librechatUserId: id } })
+  const user = await db.col.users.findOneAndUpdate(
+    { _id: sub, status: 'active' },
+    { $set: { librechatUserId: id } },
+    { returnDocument: 'after' },
+  )
+  if (user) await applyStartBudget(db, user)
   return user
 }
 

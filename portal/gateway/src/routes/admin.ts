@@ -1,4 +1,5 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest } from 'fastify'
+import { budgetHistory, remainingUsd, setMonthlyBudget, topUp, type BudgetEventType } from '../budgets.js'
 import type { PortalUser } from '../db.js'
 import { listDevices, revokeAllDevices, revokeDevice, type SessionContext } from '../devices.js'
 import { html, page, type SafeHtml } from '../html.js'
@@ -49,6 +50,13 @@ export function adminRoute<T extends FastifyRequest>(
   }
 }
 
+const BUDGET_EVENT_TEXT: Record<BudgetEventType, string> = {
+  start: 'Startbudget',
+  topup: 'Aufgeladen',
+  reset: 'Monatlich zurückgesetzt',
+  'monthly-changed': 'Monatsbudget geändert',
+}
+
 function statusLabel(user: PortalUser): SafeHtml {
   return user.status === 'active' ? html`<span class="ok">aktiv</span>` : html`<span class="error">gesperrt</span>`
 }
@@ -71,6 +79,16 @@ export function registerAdminRoutes(app: FastifyInstance, ctx: AppContext): void
     `${base}/admin`,
     adminRoute(ctx, async (req, reply, session) => {
       const users = await db.col.users.find().sort({ createdAt: -1 }).toArray()
+      const balances = new Map(
+        (
+          await db.librechat
+            .collection('balances')
+            .find({ user: { $in: users.flatMap((u) => (u.librechatUserId ? [u.librechatUserId] : [])) } })
+            .toArray()
+        ).map((b) => [String(b.user), (Number(b.tokenCredits) || 0) / 1_000_000]),
+      )
+      const remaining = (u: PortalUser) =>
+        u.librechatUserId ? (balances.get(String(u.librechatUserId)) ?? 0) : u.pendingStartBudgetUsd
       const error = (req.query as { error?: string }).error ?? ''
       const csrf = csrfField(config, session)
       return sendHtml(
@@ -93,13 +111,14 @@ export function registerAdminRoutes(app: FastifyInstance, ctx: AppContext): void
             </form>
             <div class="card table-wrap">
               <table>
-                <thead><tr><th>Benutzer</th><th>Rolle</th><th>Status</th><th>Monatsbudget</th><th>Angelegt</th></tr></thead>
+                <thead><tr><th>Benutzer</th><th>Rolle</th><th>Status</th><th>Guthaben</th><th>Monatsbudget</th><th>Angelegt</th></tr></thead>
                 <tbody>
                   ${users.map(
                     (u) => html`<tr>
                       <td><a href="${base}/admin/users/${u._id}">${u.username}</a></td>
                       <td>${u.role === 'admin' ? 'Admin' : 'Nutzer'}</td>
                       <td>${statusLabel(u)}</td>
+                      <td>${remaining(u).toFixed(2)} $</td>
                       <td>${u.monthlyBudgetUsd.toFixed(2)} $</td>
                       <td>${formatDate(u.createdAt)}</td>
                     </tr>`,
@@ -138,7 +157,13 @@ export function registerAdminRoutes(app: FastifyInstance, ctx: AppContext): void
     adminRoute(ctx, async (req, reply, session) => {
       const user = await db.col.users.findOne({ _id: req.params.id })
       if (!user) return reply.code(404).send('Benutzer nicht gefunden')
-      const [devices, links] = await Promise.all([listDevices(db, user._id), listLoginLinks(db, user._id)])
+      const [devices, links, history, balanceUsd] = await Promise.all([
+        listDevices(db, user._id),
+        listLoginLinks(db, user._id),
+        budgetHistory(db, user._id, 20),
+        remainingUsd(db, user.librechatUserId),
+      ])
+      const remaining = user.librechatUserId ? balanceUsd : user.pendingStartBudgetUsd
       const csrf = csrfField(config, session)
       // A freshly created login link is passed once via query (token is never stored)
       const newToken = req.query.qr
@@ -158,6 +183,40 @@ export function registerAdminRoutes(app: FastifyInstance, ctx: AppContext): void
                   </div>`
                 : ''
             }
+            <div class="card" id="budget">
+              <h2 style="margin-top:0">Budget</h2>
+              <div class="row">
+                <div><span class="muted">Verbleibend</span><br><strong id="remaining-usd" style="font-size:1.4rem">${remaining.toFixed(2)} $</strong>
+                  ${user.librechatUserId ? '' : html`<br><span class="muted">wird beim ersten Login gebucht</span>`}</div>
+                <div><span class="muted">Monatsbudget</span><br><strong style="font-size:1.4rem">${user.monthlyBudgetUsd.toFixed(2)} $</strong></div>
+                <div><span class="muted">Nächstes Zurücksetzen</span><br><strong>${formatDate(user.nextResetAt)}</strong></div>
+              </div>
+              <div class="row">
+                <form method="post" action="${base}/admin/users/${user._id}/topup">
+                  ${csrf}
+                  <label for="amountUsd">Limit erweitern um (USD)</label>
+                  <input id="amountUsd" name="amountUsd" type="number" min="0.01" step="0.01" value="5" required>
+                  <button type="submit">Aufladen</button>
+                </form>
+                <form method="post" action="${base}/admin/users/${user._id}/monthly">
+                  ${csrf}
+                  <label for="monthlyBudgetUsd">Monatsbudget (USD)</label>
+                  <input id="monthlyBudgetUsd" name="monthlyBudgetUsd" type="number" min="0" step="0.01" value="${user.monthlyBudgetUsd}" required>
+                  <button type="submit" class="secondary">Speichern</button>
+                </form>
+              </div>
+              ${
+                history.length
+                  ? html`<div class="table-wrap"><table>
+                      <thead><tr><th>Zeit</th><th>Vorgang</th><th>Betrag</th><th>Von</th></tr></thead>
+                      <tbody>${history.map(
+                        (h) => html`<tr><td>${formatDate(h.at)}</td><td>${BUDGET_EVENT_TEXT[h.type]}</td><td>${h.amountUsd.toFixed(2)} $</td><td>${h.actor === 'system' ? 'automatisch' : h.actor}</td></tr>`,
+                      )}</tbody>
+                    </table></div>`
+                  : ''
+              }
+            </div>
+
             <form method="post" action="${base}/admin/users/${user._id}/login-links" class="card">
               ${csrf}
               <h2 style="margin-top:0">Neuen Login-QR erstellen</h2>
@@ -236,6 +295,30 @@ export function registerAdminRoutes(app: FastifyInstance, ctx: AppContext): void
       })
       await audit(db, session.user.username, 'login-link.created', user._id, { linkId: link._id, validHours, maxUses })
       return reply.redirect(`${base}/admin/users/${user._id}?qr=${token}`)
+    }),
+  )
+
+  app.post<{ Params: { id: string } }>(
+    `${base}/admin/users/:id/topup`,
+    adminRoute(ctx, async (req, reply, session) => {
+      const user = await db.col.users.findOne({ _id: req.params.id })
+      if (!user) return reply.code(404).send('Benutzer nicht gefunden')
+      const amountUsd = Number(field(req.body, 'amountUsd').replace(',', '.'))
+      if (!(amountUsd > 0 && amountUsd <= 1000)) return reply.code(400).send('Betrag zwischen 0,01 und 1000 USD angeben.')
+      await topUp(db, user, amountUsd, session.user.username)
+      return reply.redirect(`${base}/admin/users/${user._id}#budget`)
+    }),
+  )
+
+  app.post<{ Params: { id: string } }>(
+    `${base}/admin/users/:id/monthly`,
+    adminRoute(ctx, async (req, reply, session) => {
+      const user = await db.col.users.findOne({ _id: req.params.id })
+      if (!user) return reply.code(404).send('Benutzer nicht gefunden')
+      const amountUsd = Number(field(req.body, 'monthlyBudgetUsd').replace(',', '.'))
+      if (!(amountUsd >= 0 && amountUsd <= 1000)) return reply.code(400).send('Betrag zwischen 0 und 1000 USD angeben.')
+      await setMonthlyBudget(db, user, amountUsd, session.user.username)
+      return reply.redirect(`${base}/admin/users/${user._id}#budget`)
     }),
   )
 

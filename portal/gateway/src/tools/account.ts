@@ -1,7 +1,5 @@
+import { remainingUsd } from '../budgets.js'
 import { defineTool, textResult } from '../mcp.js'
-
-/** 1 USD = 1,000,000 LibreChat credits */
-export const CREDITS_PER_USD = 1_000_000
 
 export const accountStatusTool = defineTool({
   name: 'konto_status',
@@ -11,11 +9,10 @@ export const accountStatusTool = defineTool({
     'Nutze das Werkzeug, wenn der Nutzer nach Guthaben, Budget, Limit oder Kosten fragt.',
   inputSchema: {},
   async run(_args, { db, user, librechatUserId }) {
-    const balance = await db.librechat.collection('balances').findOne({ user: librechatUserId })
-    const remainingUsd = (Number(balance?.tokenCredits ?? 0) || 0) / CREDITS_PER_USD
+    const remaining = await remainingUsd(db, librechatUserId)
     const lines = [
       `Benutzer: ${user.username}`,
-      `Verbleibendes Guthaben: ${remainingUsd.toFixed(2)} USD`,
+      `Verbleibendes Guthaben: ${remaining.toFixed(2)} USD`,
       `Monatsbudget: ${user.monthlyBudgetUsd.toFixed(2)} USD`,
       `Nächste Aufladung: ${user.nextResetAt ? user.nextResetAt.toISOString().slice(0, 10) : 'keine geplant'}`,
     ]
