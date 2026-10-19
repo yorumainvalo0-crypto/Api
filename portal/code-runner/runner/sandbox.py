@@ -60,6 +60,21 @@ def _sha256(path: Path) -> str:
     return digest.hexdigest()
 
 
+def _hand_over(data_dir: Path) -> None:
+    """Lets the sandbox user (uid 1000) write /mnt/data.
+
+    The runner runs as root in production and simply chowns; without root (CI, local tests)
+    the directory is made world-writable instead.
+    """
+    paths = [data_dir, *data_dir.rglob("*")]
+    try:
+        for path in paths:
+            os.chown(path, 1000, 1000)
+    except PermissionError:
+        for path in paths:
+            path.chmod(0o777 if path.is_dir() else 0o666)
+
+
 def _truncate(data: bytes, limit: int) -> tuple[str, bool]:
     if len(data) <= limit:
         return data.decode("utf-8", errors="replace"), False
@@ -90,9 +105,7 @@ class Sandbox:
         try:
             input_hashes, read_only = self._mount_inputs(inputs, data_dir)
             (code_dir / filename).write_text(code)
-            # The sandbox user (uid 1000) owns /mnt/data; code is read-only
-            for path in [data_dir, *data_dir.rglob("*")]:
-                os.chown(path, 1000, 1000)
+            _hand_over(data_dir)
             for name in read_only:
                 (data_dir / name).chmod(0o444)
 
