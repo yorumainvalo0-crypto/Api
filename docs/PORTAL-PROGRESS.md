@@ -20,13 +20,20 @@ MongoDB und Test-Doubles für Anthropic/OpenRouter). Auf dem Hetzner-Server ist 
 | M7b     | CAD-Dienst + 3D-Viewer                               | ✅ fertig       | ✅ 6 + 3 + 2 |
 | M8      | Härtung, Backup/Restore, Go-live-Anleitung           | ✅ fertig       | ✅ 4 + 1 + Restore |
 
-**Nächster Schritt:** Inbetriebnahme auf dem Server nach [GO-LIVE.md](GO-LIVE.md) – alles Nötige liegt vor.
+**Status: LIVE** auf `https://ai.dev.a-b-cloud.de` seit 19.10.2026 (altes Portal gestoppt, per `./rollback.sh` zurückholbar).
 
 ## Wartet auf dich
 
 - Nichts mehr für die Inbetriebnahme. Später optional: Bild/Sprache/Video einschalten (`MEDIA_ENABLED=true` + OpenRouter-Key).
 
 ## Log
+
+### 19.10.2026 – Live geschaltet
+
+- `start.sh` auf dem Server: Selbsttest ok (Code-Ausführung, 3D-Teile), altes Portal gestoppt, neues auf Port 45012.
+- Chat-Login klappte zuerst nicht: Der Server-nginx lauscht nicht auf der Docker-Brücke, der Abkürzungsweg
+  (`extra_hosts`) wurde abgelehnt → entfernt, LibreChat holt die Login-Konfiguration über die öffentliche Adresse.
+- Admin-Login, Chat-Login und Chat funktionieren.
 
 ### 19.10.2026 – Erster Start auf dem Server: angepasst an die Hardware
 
