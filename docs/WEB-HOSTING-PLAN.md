@@ -113,6 +113,10 @@ LibreChat legt den Benutzer beim ersten OIDC-Login automatisch an
 
 ## 5. Dateiausgabe aller Typen (A8)
 
+> **Umgesetzt (M2):** eigener Code-Runner `portal/code-runner/` statt ClickHouse/code-interpreter
+> (der braucht `/dev/kvm` für sichere Isolation). Jede Ausführung in einem frischen Container ohne
+> Netzwerk; die Tabelle unten beschreibt das ursprüngliche Konzept.
+
 | Baustein                                          | Was er liefert                                                                                         |
 | ------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | **Code-Interpreter** (selbst gehostet, Open Source: ClickHouse/code-interpreter) | Claude führt Python/Node/… in einer Sandbox aus; erzeugte Dateien erscheinen als **Download** im Chat (bis 10 je Lauf). Vorschau für PDF, PPTX, CSV, Text, Bilder. |

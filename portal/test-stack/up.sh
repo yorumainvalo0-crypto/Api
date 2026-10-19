@@ -3,10 +3,12 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 
+# Compose reads .env for variable interpolation (also for `docker compose exec` in the tests)
+printf 'CODE_WORK_DIR=%s\n' "$PWD/data/code-work" > .env
 docker compose down -v --remove-orphans >/dev/null 2>&1 || true
 rm -rf data
 # LibreChat runs as uid 1000 inside the container
-mkdir -p data/uploads data/images data/logs data/mongo data/certs
+mkdir -p data/uploads data/images data/logs data/mongo data/certs data/code-work data/code-store
 chmod -R 777 data/uploads data/images data/logs
 
 # Test CA + certificate for portal.test (LibreChat only talks OIDC over HTTPS)

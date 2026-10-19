@@ -27,9 +27,21 @@ services:
     ports:
       - "127.0.0.1:3090:8080"
 
+  code-runner:
+    image: portal-code-runner:dev
+    environment:
+      - WORK_DIR=${CODE_WORK_DIR:?run ./up.sh}
+      - SANDBOX_IMAGE=portal-sandbox:dev
+      - EXEC_TIMEOUT_SECONDS=30
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      # Same path inside and outside: sandbox containers bind-mount sub-directories of it
+      - ${CODE_WORK_DIR:?run ./up.sh}:${CODE_WORK_DIR:?run ./up.sh}
+      - ./data/code-store:/data/store
+
   api:
     image: registry.librechat.ai/librechat-ai/librechat:v0.8.8
-    depends_on: [mongodb, mocks, portal-gateway, nginx]
+    depends_on: [mongodb, mocks, portal-gateway, nginx, code-runner]
     env_file: test.env
     environment:
       - HOST=0.0.0.0
@@ -45,6 +57,7 @@ services:
       - type: bind
         source: ../deploy/librechat.yaml
         target: /app/librechat.yaml
+      - ../deploy/skill:/app/skill:ro
       - ./data/uploads:/app/uploads
       - ./data/images:/app/client/public/images
       - ./data/logs:/app/logs

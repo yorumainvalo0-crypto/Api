@@ -25,7 +25,12 @@ export function compose(...args) {
 
 /** Run one of LibreChat's npm admin scripts inside the api container. */
 export function librechatScript(...args) {
-  return compose('exec', '-T', 'api', 'npm', 'run', ...args)
+  try {
+    return compose('exec', '-T', 'api', 'npm', 'run', ...args)
+  } catch (error) {
+    const lastLine = String(error.stdout ?? '').trim().split('\n').pop()
+    throw new Error(`LibreChat script ${args[0]} failed: ${lastLine}`)
+  }
 }
 
 export async function withMongo(fn) {

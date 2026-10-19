@@ -9,6 +9,38 @@ const OUTPUT_TOKENS = Number(process.env.MOCK_OUTPUT_TOKENS ?? 500)
 const REPLY = process.env.MOCK_REPLY ?? 'Hallo vom Test-Claude.'
 
 const requests = []
+// Scripted tool calls: when a prompt contains `trigger`, answer with a tool_use first,
+// then with `reply` once the tool result comes back
+const scenarios = []
+
+function lastUserMessage(body) {
+  const messages = body?.messages ?? []
+  return messages[messages.length - 1]
+}
+
+function hasToolResult(message) {
+  return Array.isArray(message?.content) && message.content.some((block) => block.type === 'tool_result')
+}
+
+function findScenario(body) {
+  const text = JSON.stringify(body?.messages ?? [])
+  return scenarios.find((s) => text.includes(s.trigger))
+}
+
+function streamToolUse(res, model, tool, input) {
+  res.writeHead(200, { 'content-type': 'text/event-stream', 'cache-control': 'no-cache', connection: 'keep-alive' })
+  const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
+  send('message_start', {
+    type: 'message_start',
+    message: { id: `msg_tool_${requests.length}`, type: 'message', role: 'assistant', model, content: [], stop_reason: null, usage: { input_tokens: INPUT_TOKENS, output_tokens: 1 } },
+  })
+  send('content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'tool_use', id: `toolu_mock_${requests.length}`, name: tool, input: {} } })
+  send('content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'input_json_delta', partial_json: JSON.stringify(input) } })
+  send('content_block_stop', { type: 'content_block_stop', index: 0 })
+  send('message_delta', { type: 'message_delta', delta: { stop_reason: 'tool_use', stop_sequence: null }, usage: { output_tokens: OUTPUT_TOKENS } })
+  send('message_stop', { type: 'message_stop' })
+  res.end()
+}
 
 function readBody(req) {
   return new Promise((resolve, reject) => {
@@ -24,33 +56,33 @@ function sendJson(res, status, body) {
   res.end(JSON.stringify(body))
 }
 
-function anthropicMessage(model) {
+function anthropicMessage(model, reply = REPLY) {
   return {
     id: `msg_mock_${requests.length}`,
     type: 'message',
     role: 'assistant',
     model,
-    content: [{ type: 'text', text: REPLY }],
+    content: [{ type: 'text', text: reply }],
     stop_reason: 'end_turn',
     stop_sequence: null,
     usage: { input_tokens: INPUT_TOKENS, output_tokens: OUTPUT_TOKENS },
   }
 }
 
-function streamAnthropic(res, model) {
+function streamAnthropic(res, model, reply = REPLY) {
   res.writeHead(200, {
     'content-type': 'text/event-stream',
     'cache-control': 'no-cache',
     connection: 'keep-alive',
   })
   const send = (event, data) => res.write(`event: ${event}\ndata: ${JSON.stringify(data)}\n\n`)
-  const message = anthropicMessage(model)
+  const message = anthropicMessage(model, reply)
   send('message_start', {
     type: 'message_start',
     message: { ...message, content: [], stop_reason: null, usage: { input_tokens: INPUT_TOKENS, output_tokens: 1 } },
   })
   send('content_block_start', { type: 'content_block_start', index: 0, content_block: { type: 'text', text: '' } })
-  for (const word of REPLY.split(/(?<= )/)) {
+  for (const word of reply.split(/(?<= )/)) {
     send('content_block_delta', { type: 'content_block_delta', index: 0, delta: { type: 'text_delta', text: word } })
   }
   send('content_block_stop', { type: 'content_block_stop', index: 0 })
@@ -78,6 +110,11 @@ const server = http.createServer(async (req, res) => {
     return sendJson(res, 200, requests)
   }
   if (url.pathname === '/health') return sendJson(res, 200, { ok: true })
+  if (url.pathname === '/__scenarios') {
+    if (req.method === 'POST') scenarios.push(body)
+    if (req.method === 'DELETE') scenarios.length = 0
+    return sendJson(res, 200, scenarios)
+  }
 
   // Minimal MCP server (streamable HTTP, JSON responses) standing in for the portal gateway
   if (url.pathname === '/portal/mcp') {
@@ -119,7 +156,11 @@ const server = http.createServer(async (req, res) => {
   // Anthropic Messages API (SDK may call /messages or /v1/messages depending on base URL)
   if (req.method === 'POST' && url.pathname.endsWith('/messages')) {
     const model = body?.model ?? 'unknown'
-    return body?.stream ? streamAnthropic(res, model) : sendJson(res, 200, anthropicMessage(model))
+    const scenario = body?.stream ? findScenario(body) : null
+    if (scenario && !hasToolResult(lastUserMessage(body))) {
+      return streamToolUse(res, model, scenario.tool, scenario.input)
+    }
+    return body?.stream ? streamAnthropic(res, model, scenario?.reply) : sendJson(res, 200, anthropicMessage(model))
   }
   if (req.method === 'POST' && url.pathname.endsWith('/messages/count_tokens')) {
     return sendJson(res, 200, { input_tokens: INPUT_TOKENS })

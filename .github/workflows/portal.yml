@@ -31,3 +31,21 @@ jobs:
       - run: npm run build
       - name: Build Docker image
         run: docker build -t portal-gateway:ci .
+
+  code-runner:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: portal/code-runner
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build sandbox image
+        run: docker build -t portal-sandbox:dev sandbox
+      - run: pip install -r requirements-dev.txt
+      # Tests start real sandbox containers; work dirs must be visible to the Docker daemon
+      - run: pytest -q
+      - name: Build runner image
+        run: docker build -t portal-code-runner:ci .

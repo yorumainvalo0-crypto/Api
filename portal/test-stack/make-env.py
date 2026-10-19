@@ -20,7 +20,6 @@ values = {
     "DOMAIN_SERVER": PUBLIC_URL,
     "ANTHROPIC_API_KEY": "sk-ant-test",
     "OPENROUTER_KEY": "sk-or-test",
-    "LIBRECHAT_CODE_API_KEY": "test",
     "OPENID_ISSUER": f"{PUBLIC_URL}/portal/oidc",
     "OPENID_CLIENT_SECRET": OIDC_CLIENT_SECRET,
     "OPENID_SESSION_SECRET": secrets.token_hex(32),

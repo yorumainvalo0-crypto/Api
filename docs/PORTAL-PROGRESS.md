@@ -11,9 +11,9 @@ MongoDB und Test-Doubles für Anthropic/OpenRouter). Auf dem Hetzner-Server ist 
 | ------- | ---------------------------------------------------- | -------------- | ---- |
 | M0      | Repo-Struktur `portal/`, Server-Bestandsaufnahme     | ✅ fertig       | ✅    |
 | M1      | LibreChat-Basis (Claude, Model-Specs, Guthaben)      | ✅ fertig       | ✅ 5/5 |
-| M2      | Code-Interpreter + Datei-Skills                      | ⏳ in Arbeit    |      |
+| M2      | Code-Ausführung + Datei-Skills                       | ✅ fertig       | ✅ 11 + 2 |
 | M3      | Gateway-Kern: Login, Admin, Login-QR, Geräte         | ✅ fertig       | ✅ 25 + 5 |
-| M4      | Gruppen + Einladungs-QR                              | offen          |      |
+| M4      | Gruppen + Einladungs-QR                              | ⏳ in Arbeit    |      |
 | M5      | Budgets in USD                                       | offen          |      |
 | M6      | Admin-Dashboard                                      | offen          |      |
 | M7      | Media (Bild/Sprache/Video via OpenRouter)            | offen          |      |
@@ -28,6 +28,28 @@ MongoDB und Test-Doubles für Anthropic/OpenRouter). Auf dem Hetzner-Server ist 
   **nicht** vom Guthaben ab. Bis zur Entscheidung: in der Anthropic Console für den Workspace abschalten.
 
 ## Log
+
+### 19.10.2026 – M2 fertig (Code-Ausführung, Dateiausgabe, Skills)
+
+- Statt des offiziellen Code-Interpreters (braucht `/dev/kvm`, Redis, S3, viele Images) ein eigener,
+  schlanker **Code-Runner** `portal/code-runner/`, der LibreChats Code-Schnittstelle spricht.
+  - **Jede Ausführung in einem frischen Container:** kein Netzwerk, max. 1 GB RAM / 1 CPU / 256
+    Prozesse, Zeitlimit, nur `/mnt/data` beschreibbar, kein root, Container danach gelöscht.
+  - Sandbox-Image mit Python, Node, python-docx, openpyxl, python-pptx, reportlab, pypdf,
+    matplotlib, pandas, Schriften mit Umlauten/€.
+  - Hochgeladene Dateien landen in `/mnt/data`, neue/geänderte Dateien kommen als Download zurück.
+- **4 Skills** für Claude (`portal/deploy/skill/`): Word, Excel, PowerPoint, PDF – Anleitungen für
+  saubere Dateien (Formatierung, Formeln, Diagramme, deutsche Zahlen-/Datumsformate).
+- **Tests:** 11 Runner-Tests mit echten Containern (docx/xlsx/pptx/pdf erzeugen, Uploads verarbeiten,
+  kein Netzwerk, Zeitlimit, kein Schreiben außerhalb, schreibgeschützte Skill-Dateien, Umlaute im PDF)
+  + 2 Browser-Tests: Claude erzeugt eine Word-Datei → erscheint im Chat → Download ist eine echte
+  `.docx`; die 4 Skills werden Claude angeboten. **Gesamt jetzt 12/12 Browser-Tests grün.**
+- Produktions-Compose ergänzt (Gateway + Code-Runner, alle Ports nur lokal) und mit
+  `docker compose config` gegen LibreChats Original-Datei geprüft; Build-Skript für die Images.
+- ⚠ **Sicherheitshinweis:** Der Code-Runner steuert Docker über den Docker-Socket (nötig, um pro
+  Ausführung einen Container zu starten). Er ist nur intern erreichbar; der Code selbst läuft
+  ohne Netzwerk und Rechte. Für einen Kreis vertrauenswürdiger Nutzer angemessen.
+
 
 ### 19.10.2026 – M3 fertig (Gateway: Login, Admin, Login-QR, Geräte)
 
