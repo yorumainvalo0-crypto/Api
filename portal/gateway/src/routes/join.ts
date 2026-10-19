@@ -57,7 +57,7 @@ export function registerJoinRoutes(app: FastifyInstance, ctx: AppContext): void 
 
   app.post<{ Params: { token: string } }>(
     `${base}/join/:token`,
-    { config: { rateLimit: { max: 20, timeWindow: '10 minutes' } } },
+    { config: { rateLimit: { max: config.JOIN_RATE_LIMIT, timeWindow: '10 minutes' } } },
     async (req, reply) => {
       const username = field(req.body, 'username')
       const result = await joinWithInvite(db, req.params.token, username)

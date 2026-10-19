@@ -7,7 +7,7 @@ import type { Config } from './config.js'
 import type { Database } from './db.js'
 import { safeEqual, sign } from './security.js'
 
-export type MediaKind = 'image' | 'speech' | 'video'
+export type MediaKind = 'image' | 'speech' | 'video' | 'cad'
 
 export interface MediaFile {
   _id: string
@@ -57,6 +57,10 @@ const EXTENSIONS: Record<string, string> = {
   'audio/wav': 'wav',
   'video/mp4': 'mp4',
   'video/webm': 'webm',
+  'model/stl': 'stl',
+  'model/step': 'step',
+  'model/3mf': '3mf',
+  'model/gltf-binary': 'glb',
 }
 
 export async function storeMedia(

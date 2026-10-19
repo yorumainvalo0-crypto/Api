@@ -12,7 +12,9 @@ import { registerFileRoutes } from './routes/files.js'
 import { registerGroupRoutes } from './routes/groups.js'
 import { registerJoinRoutes } from './routes/join.js'
 import { registerUsageRoutes } from './routes/usage.js'
+import { registerViewerRoutes } from './routes/viewer.js'
 import { accountStatusTool } from './tools/account.js'
+import { createCadTool } from './tools/cad.js'
 import { mediaTools } from './tools/media.js'
 import type { AppContext } from './web.js'
 
@@ -57,7 +59,8 @@ export async function buildApp({ config, db, logger = false }: BuildOptions): Pr
     registerJoinRoutes(web, ctx)
     registerUsageRoutes(web, ctx)
     registerFileRoutes(web, ctx)
-    registerMcpRoute(web, ctx, [accountStatusTool, ...mediaTools])
+    registerViewerRoutes(web, ctx)
+    registerMcpRoute(web, ctx, [accountStatusTool, ...mediaTools, createCadTool])
   })
 
   return app

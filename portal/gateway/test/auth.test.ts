@@ -157,3 +157,23 @@ describe('OIDC', () => {
     expect(meta.claims_supported).toEqual(expect.arrayContaining(['preferred_username', 'email', 'roles']))
   })
 })
+
+describe('rate limits', () => {
+  it('blocks repeated admin login attempts from one IP', async () => {
+    const limited = await createTestEnv({ ADMIN_LOGIN_RATE_LIMIT: '3' })
+    try {
+      const statuses: number[] = []
+      for (let i = 0; i < 5; i++) {
+        const res = await limited.app.inject({
+          method: 'POST',
+          url: '/portal/admin/login',
+          ...form({ username: ADMIN_USERNAME, password: 'wrong', returnTo: '' }),
+        })
+        statuses.push(res.statusCode)
+      }
+      expect(statuses).toEqual([401, 401, 401, 429, 429])
+    } finally {
+      await limited.close()
+    }
+  })
+})

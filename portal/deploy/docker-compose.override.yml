@@ -47,6 +47,7 @@ services:
     environment:
       - WORK_DIR=/opt/portal-data/code-work
       - SANDBOX_IMAGE=portal-sandbox:latest
+      - CAD_SANDBOX_IMAGE=portal-cad-sandbox:latest
       - EXEC_TIMEOUT_SECONDS=120
       - EXEC_MEMORY=1g
       - MAX_PARALLEL=4

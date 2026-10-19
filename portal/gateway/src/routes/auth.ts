@@ -74,7 +74,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext, provid
     )
   }
 
-  app.post(`${base}/admin/login`, { config: { rateLimit: { max: 10, timeWindow: '5 minutes' } } }, async (req, reply) => {
+  app.post(`${base}/admin/login`, { config: { rateLimit: { max: config.ADMIN_LOGIN_RATE_LIMIT, timeWindow: '5 minutes' } } }, async (req, reply) => {
     const username = field(req.body, 'username').trim().toLowerCase()
     const password = field(req.body, 'password')
     const returnTo = field(req.body, 'returnTo')
@@ -131,7 +131,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext, provid
     return sendHtml(reply, await totpPage(user._id, req.query.returnTo ?? '', ''))
   })
 
-  app.post(`${base}/admin/totp`, { config: { rateLimit: { max: 10, timeWindow: '5 minutes' } } }, async (req, reply) => {
+  app.post(`${base}/admin/totp`, { config: { rateLimit: { max: config.ADMIN_LOGIN_RATE_LIMIT, timeWindow: '5 minutes' } } }, async (req, reply) => {
     const user = await pendingAdmin(req.cookies[PENDING_COOKIE])
     if (!user) return reply.redirect(`${base}/admin/login`)
     const code = field(req.body, 'code')

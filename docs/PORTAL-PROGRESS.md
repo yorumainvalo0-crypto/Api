@@ -17,8 +17,8 @@ MongoDB und Test-Doubles für Anthropic/OpenRouter). Auf dem Hetzner-Server ist 
 | M5      | Budgets in USD                                       | ✅ fertig       | ✅ 6 + 3 |
 | M6      | Admin-Dashboard                                      | ✅ fertig       | ✅ 6 + 3 |
 | M7      | Media (Bild/Sprache/Video via OpenRouter)            | ✅ fertig       | ✅ 8 + 4 |
-| M7b     | CAD-Dienst + 3D-Viewer                               | ⏳ in Arbeit    |      |
-| M8      | Härtung, Backup/Restore, Go-live-Anleitung           | offen          |      |
+| M7b     | CAD-Dienst + 3D-Viewer                               | ✅ fertig       | ✅ 6 + 3 + 2 |
+| M8      | Härtung, Backup/Restore, Go-live-Anleitung           | ⏳ in Arbeit    |      |
 
 ## Wartet auf dich
 
@@ -26,10 +26,34 @@ MongoDB und Test-Doubles für Anthropic/OpenRouter). Auf dem Hetzner-Server ist 
 - Server-Bestandsaufnahme ausführen (siehe M0) und Ausgabe schicken.
 - **Media-Modelle** prüfen/festlegen (Standard: Bilder `google/gemini-2.5-flash-image`, Sprache
   `openai/gpt-4o-mini-tts`, Video `google/veo-3.1`) – gern die Modelle aus dem alten Portal nennen.
+- **3D-Drucker/Slicer** (z. B. Bambu, Prusa) – dann passe ich Toleranzen und Bauraum im CAD-Skill an.
 - **Websuche** (Schalter „Web Search“ in LibreChat): ja oder nein? LibreChat bucht die Suchkosten
   **nicht** vom Guthaben ab. Bis zur Entscheidung: in der Anthropic Console für den Workspace abschalten.
 
 ## Log
+
+### 19.10.2026 – M7b fertig (technische 3D-Teile + 3D-Vorschau)
+
+- **Werkzeug `cad_erstellen`:** Claude schreibt parametrischen **build123d**-Code (Millimeter);
+  ein eigener CAD-Container (OpenCascade, kein Netzwerk, 2 GB RAM, 90 s Zeitlimit) baut das Teil.
+  Zurück kommen: **Vorschaubild mit 4 Ansichten im Chat**, Maße, Volumen, Oberfläche,
+  „wasserdicht/druckbar“, **STL, 3MF, STEP** zum Download und ein Link zur **3D-Ansicht**.
+- **Versionen:** gleicher Name im selben Chat = neue Version („Löcher auf M5“ → Version 2).
+  Fehler im Code gehen lesbar an Claude zurück, Claude korrigiert selbst.
+- **3D-Viewer** `/portal/view/…`: drehen/zoomen (Maus und Touch), mm-Raster, Maß-Box,
+  Ansichten Iso/Vorne/Oben/Rechts, Drahtgitter, Schnitt in der Höhe, Versionsauswahl, Downloads,
+  Vollbild, Hell/Dunkel. three.js wird vom Gateway selbst ausgeliefert (kein externes CDN).
+- **Skill „cad-3d-printing“:** build123d-Muster und FDM-Regeln (Wandstärken, Toleranzen,
+  Schraubenlöcher, Überhänge, Druckausrichtung).
+- **Tests:** 6 Runner-Tests mit echtem CAD-Kern (Halterung mit Löchern: Maße und Volumen exakt,
+  alle Formate gültig, Fehler lesbar, Endlosschleife abgebrochen, kein Netzwerk) + 3 Gateway-Tests
+  (Versionen, Fehler, Viewer-Signatur, three.js ohne Pfad-Ausbruch) + 2 Browser-Tests
+  (Rohrschelle 25 mm → exakt 55 × 20 × 15,5 mm, wasserdicht, STEP gültig; Viewer rendert per WebGL).
+- Beim Anschauen gefunden und behoben: Modell im Viewer war schwarz (fehlende Normalen),
+  Vorschau zu klein; Rate-Limit des Admin-Logins jetzt konfigurierbar (Test: 4. Fehlversuch → gesperrt).
+- **Stand gesamt:** 55 Gateway- + 17 Runner- + 28 Browser-Tests grün.
+- Screenshots: [Chat mit CAD-Vorschau](screenshots/chat-cad.png) · [3D-Viewer](screenshots/viewer-3d.png)
+
 
 ### 19.10.2026 – M7 fertig (Bild, Sprache, Video über OpenRouter)
 

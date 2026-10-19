@@ -35,6 +35,11 @@ const schema = z.object({
   IMAGE_MIN_BALANCE_USD: z.coerce.number().nonnegative().default(0.2),
   TTS_MIN_BALANCE_USD: z.coerce.number().nonnegative().default(0.05),
   VIDEO_MIN_BALANCE_USD: z.coerce.number().nonnegative().default(3),
+  /** Admin password/TOTP attempts per IP and 5 minutes; invite joins per IP and 10 minutes */
+  ADMIN_LOGIN_RATE_LIMIT: z.coerce.number().int().positive().default(10),
+  JOIN_RATE_LIMIT: z.coerce.number().int().positive().default(20),
+  /** Code runner (CAD sandbox) inside the Docker network */
+  CODE_RUNNER_URL: z.url().default('http://code-runner:8000'),
   /** Set to false only for local http testing */
   COOKIE_SECURE: z
     .enum(['true', 'false'])

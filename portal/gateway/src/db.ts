@@ -163,6 +163,8 @@ async function ensureIndexes(col: Collections, portal: Db): Promise<void> {
     portal.collection('mediaFiles').createIndex({ userId: 1, createdAt: -1 }),
     portal.collection('mediaFiles').createIndex({ expiresAt: 1 }),
     portal.collection('videoJobs').createIndex({ status: 1 }),
+    portal.collection('cadModels').createIndex({ userId: 1, conversationId: 1, name: 1 }, { unique: true }),
+    portal.collection('cadVersions').createIndex({ modelId: 1, version: -1 }),
     col.oidc.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
     col.oidc.createIndex({ model: 1, uid: 1 }, { sparse: true }),
     col.oidc.createIndex({ model: 1, grantId: 1 }, { sparse: true }),

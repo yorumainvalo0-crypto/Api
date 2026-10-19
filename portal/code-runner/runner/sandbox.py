@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import json
 import os
 import shutil
 from dataclasses import dataclass, field
@@ -81,8 +82,29 @@ def _truncate(data: bytes, limit: int) -> tuple[str, bool]:
     return data[:limit].decode("utf-8", errors="replace") + "\n[… Ausgabe gekürzt]", True
 
 
+@dataclass
+class CadResult:
+    ok: bool
+    stdout: str
+    stderr: str
+    info: dict | None = None
+    files: dict[str, bytes] = field(default_factory=dict)
+
+
+CAD_WRAPPER = Path(__file__).with_name("cad_wrapper.py")
+CAD_OUTPUTS = ("model.stl", "model.step", "model.3mf", "model.glb", "preview.png")
+
+
 class Sandbox:
-    def __init__(self, store: Store, work_root: Path, image: str, limits: Limits | None = None) -> None:
+    def __init__(
+        self,
+        store: Store,
+        work_root: Path,
+        image: str,
+        limits: Limits | None = None,
+        cad_image: str | None = None,
+        cad_limits: Limits | None = None,
+    ) -> None:
         self.store = store
         # Must be the same path on the host and in this container (bind-mounted 1:1),
         # because the sandbox containers mount sub-directories of it
@@ -90,7 +112,33 @@ class Sandbox:
         self.work_root.mkdir(parents=True, exist_ok=True)
         self.image = image
         self.limits = limits or Limits()
+        self.cad_image = cad_image
+        self.cad_limits = cad_limits or Limits(timeout_seconds=90, memory="2g")
         self.client = docker.from_env()
+
+    def run_cad(self, code: str, formats: list[str]) -> CadResult:
+        """Runs build123d code in the CAD image and returns the exported files."""
+        if not self.cad_image:
+            return CadResult(False, "", "CAD ist nicht eingerichtet (CAD_SANDBOX_IMAGE fehlt).")
+        job = self.work_root / f"cad-{nanoid()}"
+        data_dir, code_dir = job / "data", job / "code"
+        data_dir.mkdir(parents=True)
+        code_dir.mkdir()
+        try:
+            (code_dir / "model.py").write_text(code)
+            (code_dir / "wrapper.py").write_text(CAD_WRAPPER.read_text())
+            (code_dir / "formats.json").write_text(json.dumps([f for f in formats if f in ("step", "3mf")]))
+            _hand_over(data_dir)
+            stdout, stderr, status = self._execute(
+                ["python3", "/code/wrapper.py"], data_dir, code_dir, image=self.cad_image, limits=self.cad_limits
+            )
+            info_path = data_dir / "info.json"
+            if status == "TO" or not info_path.is_file():
+                return CadResult(False, stdout, stderr or "CAD-Ausführung ohne Ergebnis beendet.")
+            files = {name: (data_dir / name).read_bytes() for name in CAD_OUTPUTS if (data_dir / name).is_file()}
+            return CadResult(True, stdout, stderr, json.loads(info_path.read_text()), files)
+        finally:
+            shutil.rmtree(job, ignore_errors=True)
 
     def run(self, lang: str, code: str, args: list[str], inputs: list[InputFile], owner: str) -> ExecResult:
         session_id = nanoid()
@@ -133,10 +181,17 @@ class Sandbox:
                 read_only.add(name)
         return hashes, read_only
 
-    def _execute(self, command: list[str], data_dir: Path, code_dir: Path) -> tuple[str, str, str | None]:
-        limits = self.limits
+    def _execute(
+        self,
+        command: list[str],
+        data_dir: Path,
+        code_dir: Path,
+        image: str | None = None,
+        limits: Limits | None = None,
+    ) -> tuple[str, str, str | None]:
+        limits = limits or self.limits
         container = self.client.containers.create(
-            self.image,
+            image or self.image,
             command=command,
             user="1000:1000",
             working_dir="/mnt/data",

@@ -89,7 +89,7 @@ test('the document skills are offered to Claude', async () => {
   const skillTool = chat.body.tools.find((t) => t.name === 'skill')
   assert.ok(skillTool, 'skill tool missing')
   const text = JSON.stringify(skillTool) + JSON.stringify(chat.body.system ?? '')
-  for (const name of ['word-documents', 'excel-workbooks', 'powerpoint-decks', 'pdf-documents']) {
+  for (const name of ['word-documents', 'excel-workbooks', 'powerpoint-decks', 'pdf-documents', 'cad-3d-printing']) {
     assert.ok(text.includes(name), `skill ${name} not offered`)
   }
 })

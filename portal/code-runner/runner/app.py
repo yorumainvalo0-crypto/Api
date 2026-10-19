@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import os
 import re
 import tempfile
@@ -70,6 +71,29 @@ def create_app(store: Store, sandbox: Sandbox, *, max_parallel: int = 4, max_upl
         if result.status:
             response["status"] = result.status
         return response
+
+    @app.post("/v1/cad")
+    async def cad(request: Request) -> dict[str, Any]:
+        """Internal endpoint for the portal gateway: build123d code in, model files out."""
+        body = await request.json()
+        code = body.get("code")
+        if not isinstance(code, str) or not code.strip():
+            raise HTTPException(status_code=400, detail="code is required")
+        requested = body.get("formats")
+        formats = [str(f) for f in (["step", "3mf"] if requested is None else requested)]
+
+        def run() -> Any:
+            with slots:
+                return sandbox.run_cad(code, formats)
+
+        result = await run_in_threadpool(run)
+        return {
+            "ok": result.ok,
+            "stdout": result.stdout,
+            "stderr": result.stderr,
+            "info": result.info,
+            "files": {name: base64.b64encode(data).decode() for name, data in result.files.items()},
+        }
 
     async def _receive_files(request: Request) -> tuple[dict[str, str], list[tuple[str, Path]]]:
         form = await request.form(max_part_size=max_upload_bytes)
@@ -184,6 +208,12 @@ def app_from_env() -> FastAPI:
         memory=os.environ.get("EXEC_MEMORY", "1g"),
         cpus=float(os.environ.get("EXEC_CPUS", "1")),
     )
-    sandbox = Sandbox(store, Path(os.environ["WORK_DIR"]), os.environ.get("SANDBOX_IMAGE", "portal-sandbox:latest"), limits)
+    sandbox = Sandbox(
+        store,
+        Path(os.environ["WORK_DIR"]),
+        os.environ.get("SANDBOX_IMAGE", "portal-sandbox:latest"),
+        limits,
+        cad_image=os.environ.get("CAD_SANDBOX_IMAGE", "portal-cad-sandbox:latest"),
+    )
     threading.Thread(target=_prune_forever, args=(store, float(os.environ.get("RETENTION_DAYS", "7"))), daemon=True).start()
     return create_app(store, sandbox, max_parallel=int(os.environ.get("MAX_PARALLEL", "4")))

@@ -55,7 +55,9 @@ test('the total for today equals the spending booked in LibreChat today', async 
 
   await admin.page.goto(`${PUBLIC_URL}/portal/admin/usage?range=today`)
   const shown = (await admin.page.locator('#total-cost').innerText()).replace(/\s|\$/g, '').replace(',', '.')
-  assert.ok(Math.abs(Number(shown) - expected) < 0.00005, `dashboard ${shown} vs bookings ${expected}`)
+  // The tile shows 4 decimals below 1 $ and cents above
+  const precision = expected < 1 ? 0.00005 : 0.005
+  assert.ok(Math.abs(Number(shown) - expected) <= precision, `dashboard ${shown} vs bookings ${expected}`)
   // 24 hourly bars, our user appears in the table
   assert.equal(await admin.page.locator('.viz svg .hit').count(), 24)
   await admin.page.locator('#by-user').getByText(USERNAME).waitFor()

@@ -65,6 +65,10 @@ gateway = {
     "OPENROUTER_API_KEY": "sk-or-test",
     "OPENROUTER_BASE_URL": "http://mocks:8080/api/v1",
     "MEDIA_DIR": "/data/media",
+    "CODE_RUNNER_URL": "http://code-runner:8000",
+    # The test suite logs in as admin many times from one IP
+    "ADMIN_LOGIN_RATE_LIMIT": "1000",
+    "JOIN_RATE_LIMIT": "1000",
 }
 (here / "gateway.env").write_text("".join(f"{k}={v}\n" for k, v in gateway.items()))
 print("wrote test.env and gateway.env")

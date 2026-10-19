@@ -34,6 +34,7 @@ services:
     environment:
       - WORK_DIR=${CODE_WORK_DIR:?run ./up.sh}
       - SANDBOX_IMAGE=portal-sandbox:dev
+      - CAD_SANDBOX_IMAGE=portal-cad-sandbox:dev
       - EXEC_TIMEOUT_SECONDS=30
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock

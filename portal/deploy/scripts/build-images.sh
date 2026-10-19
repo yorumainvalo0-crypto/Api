@@ -5,6 +5,7 @@ set -euo pipefail
 repo="$(cd "$(dirname "$0")/../../.." && pwd)"
 
 docker build -t portal-sandbox:latest "$repo/portal/code-runner/sandbox"
+docker build -t portal-cad-sandbox:latest "$repo/portal/code-runner/cad-sandbox"
 docker build -t portal-code-runner:latest "$repo/portal/code-runner"
 docker build -t portal-gateway:latest "$repo/portal/gateway"
-echo "built portal-sandbox, portal-code-runner, portal-gateway"
+echo "built portal-sandbox, portal-cad-sandbox, portal-code-runner, portal-gateway"
