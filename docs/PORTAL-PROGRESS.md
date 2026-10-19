@@ -18,7 +18,9 @@ MongoDB und Test-Doubles für Anthropic/OpenRouter). Auf dem Hetzner-Server ist 
 | M6      | Admin-Dashboard                                      | ✅ fertig       | ✅ 6 + 3 |
 | M7      | Media (Bild/Sprache/Video via OpenRouter)            | ✅ fertig       | ✅ 8 + 4 |
 | M7b     | CAD-Dienst + 3D-Viewer                               | ✅ fertig       | ✅ 6 + 3 + 2 |
-| M8      | Härtung, Backup/Restore, Go-live-Anleitung           | ⏳ in Arbeit    |      |
+| M8      | Härtung, Backup/Restore, Go-live-Anleitung           | ✅ fertig       | ✅ 4 + 1 + Restore |
+
+**Nächster Schritt:** Inbetriebnahme auf dem Server nach [GO-LIVE.md](GO-LIVE.md) – sobald die Ports feststehen.
 
 ## Wartet auf dich
 
@@ -31,6 +33,30 @@ MongoDB und Test-Doubles für Anthropic/OpenRouter). Auf dem Hetzner-Server ist 
   **nicht** vom Guthaben ab. Bis zur Entscheidung: in der Anthropic Console für den Workspace abschalten.
 
 ## Log
+
+### 19.10.2026 – M8 fertig (Härtung, Backup/Restore, Go-live-Anleitung)
+
+- **Sicherheitsprüfung** des gesamten Portal-Codes, alle wichtigen Funde behoben und mit Tests belegt:
+  - 3D-Viewer: Modelldaten aus der Sandbox werden streng geprüft (kein Einschleusen von Skript),
+    Seite mit Content-Security-Policy.
+  - Code-Runner: liest Ausgaben der Sandbox nie über Symlinks (Test: untergeschobener Link wird ignoriert),
+    Größenlimits, Container-Logs auf 1 MB begrenzt, nur noch im internen Docker-Netz `code`.
+  - Rate-Limits ließen sich mit gefälschtem `X-Forwarded-For` umgehen → behoben (Test zeigte vorher 5× durchgelassen).
+  - Admin-TOTP: jeder Code nur einmal, nach 5 falschen Codes 15 Min. Sperre.
+  - Media-Kosten werden **vor** dem Aufruf reserviert: drei parallele Bilder bei Guthaben für zwei → eins wird
+    abgelehnt; Videos max. 2 gleichzeitig pro Person; bei Fehlern wird die Reservierung erstattet.
+  - Login-Links: erst Knopf „Auf diesem Gerät anmelden“ – Link-Vorschauen (WhatsApp, Mail-Scanner)
+    verbrauchen den QR-Code nicht mehr.
+  - Abmelden beendet die Gerätesitzung serverseitig (mit CSRF-Schutz); CSV-Export entschärft Excel-Formeln.
+- **Backup/Restore** (`backup.sh`, `restore.sh`): beide Datenbanken, Uploads, Media, Konfiguration,
+  Prüfsummen, optional Kopie auf die Storage Box. **Restore-Test:** Backup → beide DBs und Media
+  gelöscht → Restore → alle Zahlen identisch (13 Benutzer, 70 Buchungen, 12 Chats, 8 Media-Dateien),
+  Login- und Budget-Tests danach wieder grün.
+- **`setup-env.py`** erzeugt `.env` und `portal-gateway.env` mit frischen, passenden Geheimnissen (Rechte 600).
+- **`healthcheck.sh`** für Cron: prüft Chat, Gateway, Container und dass `/portal/mcp` von außen gesperrt ist;
+  Alarm einmal pro Störung (z. B. ntfy aufs Handy).
+- **[GO-LIVE.md](GO-LIVE.md):** Schritt-für-Schritt-Anleitung für den Server inkl. Rollback.
+- **Stand gesamt:** 59 Gateway- + 18 Runner- + 28 Browser-Tests grün.
 
 ### 19.10.2026 – M7b fertig (technische 3D-Teile + 3D-Vorschau)
 

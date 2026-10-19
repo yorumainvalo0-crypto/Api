@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import type { ObjectId } from 'mongodb'
 import { z } from 'zod'
 import type { Config } from '../config.js'
 import type { Database } from '../db.js'
@@ -6,15 +7,19 @@ import { defineTool, textResult } from '../mcp.js'
 import {
   MediaError,
   type MediaFile,
-  chargeMedia,
-  ensureBudget,
+  type MediaKind,
   mediaFiles,
   readMedia,
+  reserveMedia,
+  settleMedia,
   signedMediaUrl,
   storeMedia,
   videoJobs,
 } from '../media.js'
 import { OpenRouter } from '../openrouter.js'
+
+/** Videos one person may have in progress at the same time */
+const MAX_RUNNING_VIDEOS = 2
 
 const ASPECT_RATIOS = ['1:1', '16:9', '9:16', '4:3', '3:4', '3:2', '2:3'] as const
 
@@ -25,6 +30,27 @@ function usd(value: number): string {
 function failure(error: unknown) {
   if (error instanceof MediaError) return textResult(error.message, true)
   throw error
+}
+
+/** Reserves the expected cost, runs the provider call and books its real cost (nothing if it fails). */
+async function billed<T>(
+  db: Database,
+  librechatUserId: ObjectId,
+  input: { kind: MediaKind; model: string; costUsd: number; conversationId: string | null },
+  call: () => Promise<T>,
+  cost: (result: T) => number | Promise<number>,
+): Promise<{ result: T; cost: number }> {
+  const reservation = await reserveMedia(db, librechatUserId, input)
+  let result: T
+  try {
+    result = await call()
+  } catch (error) {
+    await settleMedia(db, reservation, 0)
+    throw error
+  }
+  const actual = await cost(result)
+  await settleMedia(db, reservation, actual)
+  return { result, cost: actual }
 }
 
 async function ownImage(db: Database, userId: string, id: string): Promise<MediaFile> {
@@ -46,14 +72,13 @@ export const createImageTool = defineTool({
   },
   async run(args, { db, config, user, librechatUserId, conversationId }) {
     try {
-      await ensureBudget(db, librechatUserId, config.IMAGE_MIN_BALANCE_USD)
-      const result = await new OpenRouter(config).createImage({
-        model: config.IMAGE_MODEL,
-        prompt: args.prompt,
-        aspectRatio: args.seitenverhaeltnis,
-      })
-      const cost = result.costUsd ?? config.IMAGE_MIN_BALANCE_USD
-      await chargeMedia(db, librechatUserId, { kind: 'image', model: config.IMAGE_MODEL, costUsd: cost, conversationId })
+      const { result, cost } = await billed(
+        db,
+        librechatUserId,
+        { kind: 'image', model: config.IMAGE_MODEL, costUsd: config.IMAGE_MIN_BALANCE_USD, conversationId },
+        () => new OpenRouter(config).createImage({ model: config.IMAGE_MODEL, prompt: args.prompt, aspectRatio: args.seitenverhaeltnis }),
+        (r) => r.costUsd ?? config.IMAGE_MIN_BALANCE_USD,
+      )
       const file = await storeMedia(config, db, { userId: user._id, kind: 'image', model: config.IMAGE_MODEL, mime: result.mime, data: result.data, costUsd: cost, prompt: args.prompt })
       return {
         content: [
@@ -83,11 +108,14 @@ export const editImageTool = defineTool({
   async run(args, { db, config, user, librechatUserId, conversationId }) {
     try {
       const source = await ownImage(db, user._id, args.bild_id)
-      await ensureBudget(db, librechatUserId, config.IMAGE_MIN_BALANCE_USD)
       const dataUrl = `data:${source.mime};base64,${(await readMedia(config, source)).toString('base64')}`
-      const result = await new OpenRouter(config).createImage({ model: config.IMAGE_MODEL, prompt: args.anweisung, references: [dataUrl] })
-      const cost = result.costUsd ?? config.IMAGE_MIN_BALANCE_USD
-      await chargeMedia(db, librechatUserId, { kind: 'image', model: config.IMAGE_MODEL, costUsd: cost, conversationId })
+      const { result, cost } = await billed(
+        db,
+        librechatUserId,
+        { kind: 'image', model: config.IMAGE_MODEL, costUsd: config.IMAGE_MIN_BALANCE_USD, conversationId },
+        () => new OpenRouter(config).createImage({ model: config.IMAGE_MODEL, prompt: args.anweisung, references: [dataUrl] }),
+        (r) => r.costUsd ?? config.IMAGE_MIN_BALANCE_USD,
+      )
       const file = await storeMedia(config, db, { userId: user._id, kind: 'image', model: config.IMAGE_MODEL, mime: result.mime, data: result.data, costUsd: cost, prompt: args.anweisung })
       return {
         content: [
@@ -114,17 +142,18 @@ export const createSpeechTool = defineTool({
   },
   async run(args, { db, config, user, librechatUserId, conversationId }) {
     try {
-      await ensureBudget(db, librechatUserId, config.TTS_MIN_BALANCE_USD)
       const router = new OpenRouter(config)
-      const result = await router.createSpeech({
-        model: config.TTS_MODEL,
-        text: args.text,
-        voice: args.stimme ?? config.TTS_VOICE,
-        instructions: args.sprechweise,
-      })
-      const reported = result.generationId ? await router.generationCost(result.generationId) : null
-      const cost = reported ?? (args.text.length / 1000) * config.TTS_USD_PER_1K_CHARS
-      await chargeMedia(db, librechatUserId, { kind: 'speech', model: config.TTS_MODEL, costUsd: cost, conversationId })
+      let reported: number | null = null
+      const { result, cost } = await billed(
+        db,
+        librechatUserId,
+        { kind: 'speech', model: config.TTS_MODEL, costUsd: config.TTS_MIN_BALANCE_USD, conversationId },
+        () => router.createSpeech({ model: config.TTS_MODEL, text: args.text, voice: args.stimme ?? config.TTS_VOICE, instructions: args.sprechweise }),
+        async (r) => {
+          reported = r.generationId ? await router.generationCost(r.generationId) : null
+          return reported ?? (args.text.length / 1000) * config.TTS_USD_PER_1K_CHARS
+        },
+      )
       const file = await storeMedia(config, db, { userId: user._id, kind: 'speech', model: config.TTS_MODEL, mime: result.mime, data: result.data, costUsd: cost, prompt: args.text })
       return {
         content: [
@@ -155,19 +184,35 @@ export const createVideoTool = defineTool({
   },
   async run(args, { db, config, user, librechatUserId }) {
     try {
-      await ensureBudget(db, librechatUserId, config.VIDEO_MIN_BALANCE_USD)
+      const running = await videoJobs(db).countDocuments({ userId: user._id, status: { $in: ['pending', 'in_progress'] } })
+      if (running >= MAX_RUNNING_VIDEOS) {
+        return textResult(`Es laufen schon ${running} Videos. Bitte warten, bis eines fertig ist.`, true)
+      }
       let firstFrame: string | undefined
       if (args.start_bild_id) {
         const image = await ownImage(db, user._id, args.start_bild_id)
         firstFrame = `data:${image.mime};base64,${(await readMedia(config, image)).toString('base64')}`
       }
-      const { id } = await new OpenRouter(config).submitVideo({
+      // The cost is known only when the video is done: reserve now, settle in pollVideoJobs
+      const reservation = await reserveMedia(db, librechatUserId, {
+        kind: 'video',
         model: config.VIDEO_MODEL,
-        prompt: args.prompt,
-        duration: args.dauer_sekunden,
-        aspectRatio: args.seitenverhaeltnis,
-        firstFrame,
+        costUsd: config.VIDEO_MIN_BALANCE_USD,
+        conversationId: null,
       })
+      let id: string
+      try {
+        ;({ id } = await new OpenRouter(config).submitVideo({
+          model: config.VIDEO_MODEL,
+          prompt: args.prompt,
+          duration: args.dauer_sekunden,
+          aspectRatio: args.seitenverhaeltnis,
+          firstFrame,
+        }))
+      } catch (error) {
+        await settleMedia(db, reservation, 0)
+        throw error
+      }
       const now = new Date()
       const job = {
         _id: randomUUID(),
@@ -180,6 +225,7 @@ export const createVideoTool = defineTool({
         error: null,
         fileId: null,
         costUsd: null,
+        reservation,
         createdAt: now,
         updatedAt: now,
       }
@@ -222,7 +268,11 @@ export async function pollVideoJobs(config: Config, db: Database): Promise<numbe
   for (const job of running) {
     const status = await router.videoStatus(job.openrouterId)
     if (status.status === 'failed') {
-      await videoJobs(db).updateOne({ _id: job._id }, { $set: { status: 'failed', error: status.error, updatedAt: new Date() } })
+      const failed = await videoJobs(db).findOneAndUpdate(
+        { _id: job._id, status: { $in: ['pending', 'in_progress'] } },
+        { $set: { status: 'failed', error: status.error, updatedAt: new Date() } },
+      )
+      if (failed?.reservation) await settleMedia(db, failed.reservation, 0)
       continue
     }
     if (status.status !== 'completed') {
@@ -239,7 +289,7 @@ export async function pollVideoJobs(config: Config, db: Database): Promise<numbe
     if (!claimed) continue
     const content = await router.videoContent(job.openrouterId)
     const cost = status.costUsd ?? config.VIDEO_MIN_BALANCE_USD
-    await chargeMedia(db, job.librechatUserId, { kind: 'video', model: job.model, costUsd: cost, conversationId: null })
+    if (claimed.reservation) await settleMedia(db, claimed.reservation, cost)
     const file = await storeMedia(config, db, { userId: job.userId, kind: 'video', model: job.model, mime: content.mime, data: content.data, costUsd: cost, prompt: job.prompt })
     await videoJobs(db).updateOne({ _id: job._id }, { $set: { fileId: file._id, costUsd: cost, updatedAt: new Date() } })
     finished++

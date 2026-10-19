@@ -25,7 +25,8 @@ export interface BuildOptions {
 }
 
 export async function buildApp({ config, db, logger = false }: BuildOptions): Promise<FastifyInstance> {
-  const app = Fastify({ logger, trustProxy: true })
+  // Exactly one proxy (nginx) sits in front: req.ip is the address it appended, not a client-sent entry
+  const app = Fastify({ logger, trustProxy: (_address: string, hop: number) => hop === 0 })
   const ctx: AppContext = { config, db }
 
   await app.register(cookie)

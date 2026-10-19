@@ -23,6 +23,8 @@ export interface PortalUser {
   totpSecret: string | null
   /** Secret shown during TOTP enrollment, confirmed by the first valid code */
   totpPendingSecret: string | null
+  /** Last accepted TOTP time step (replay protection) */
+  totpLastStep?: number
   createdAt: Date
 }
 

@@ -102,3 +102,19 @@ def test_cad_code_has_no_network(client: TestClient) -> None:
     body = cad(client, code)
     assert body["ok"] is False
     assert "Error" in body["stderr"]
+
+
+def test_planted_symlinks_are_not_followed(client: TestClient) -> None:
+    # Swaps an export for a symlink after the wrapper wrote it: the runner (root) must not read
+    # the link target out of its own container
+    code = BRACKET + """
+import atexit, os
+def swap():
+    os.remove("/mnt/data/model.step")
+    os.symlink("/etc/hostname", "/mnt/data/model.step")
+atexit.register(swap)
+"""
+    body = cad(client, code)
+    assert body["ok"], body["stderr"]
+    assert "model.step" not in body["files"]
+    assert "model.stl" in body["files"]

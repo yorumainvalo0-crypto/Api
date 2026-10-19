@@ -34,6 +34,8 @@ export interface VideoJob {
   error: string | null
   fileId: string | null
   costUsd: number | null
+  /** Credits reserved at submission, settled when the job ends */
+  reservation?: MediaReservation
   createdAt: Date
   updatedAt: Date
 }
@@ -114,37 +116,63 @@ export function verifyMediaSignature(config: Config, fileId: string, expires: st
   return safeEqual(signature, sign(config.PORTAL_SECRET, `media:${fileId}:${exp}`))
 }
 
-/** Refuses a media request when the remaining budget is below the expected cost. */
-export async function ensureBudget(db: Database, librechatUserId: ObjectId, minimumUsd: number): Promise<void> {
-  const remaining = await remainingUsd(db, librechatUserId)
-  if (remaining < minimumUsd) {
-    throw new MediaError(
-      `Nicht genug Guthaben: verbleibend ${remaining.toFixed(2)} USD, für diese Anfrage werden bis zu ${minimumUsd.toFixed(2)} USD benötigt. Bitte den Admin, das Limit zu erweitern.`,
-    )
-  }
+export interface MediaReservation {
+  transactionId: ObjectId
+  librechatUserId: ObjectId
+  credits: number
 }
 
-/** Books a media charge as a negative credits transaction, like LibreChat's own usage. */
-export async function chargeMedia(
+/**
+ * Takes the expected cost off the balance before the provider is called, atomically, so parallel
+ * requests cannot spend more than the budget. Booked as one negative credits transaction (like
+ * LibreChat's own usage) that settleMedia later corrects to the real cost.
+ */
+export async function reserveMedia(
   db: Database,
   librechatUserId: ObjectId,
   input: { kind: MediaKind; model: string; costUsd: number; conversationId: string | null },
-): Promise<void> {
-  const value = Math.round(input.costUsd * CREDITS_PER_USD)
-  if (value <= 0) return
+): Promise<MediaReservation> {
+  const credits = Math.max(0, Math.round(input.costUsd * CREDITS_PER_USD))
+  const balances = db.librechat.collection('balances')
+  const taken = await balances.findOneAndUpdate({ user: librechatUserId, tokenCredits: { $gte: credits } }, { $inc: { tokenCredits: -credits } })
+  if (!taken) {
+    const remaining = await remainingUsd(db, librechatUserId)
+    throw new MediaError(
+      `Nicht genug Guthaben: verbleibend ${remaining.toFixed(2)} USD, für diese Anfrage werden bis zu ${input.costUsd.toFixed(2)} USD benötigt. Bitte den Admin, das Limit zu erweitern.`,
+    )
+  }
   const now = new Date()
-  await db.librechat.collection('transactions').insertOne({
+  const { insertedId } = await db.librechat.collection('transactions').insertOne({
     user: librechatUserId,
     conversationId: input.conversationId ?? undefined,
     tokenType: 'credits',
     context: 'media',
     model: input.model,
     mediaKind: input.kind,
-    rawAmount: -value,
-    tokenValue: -value,
+    mediaStatus: 'reserved',
+    rawAmount: -credits,
+    tokenValue: -credits,
     rate: 1,
     createdAt: now,
     updatedAt: now,
   })
-  await db.librechat.collection('balances').updateOne({ user: librechatUserId }, { $inc: { tokenCredits: -value } }, { upsert: true })
+  return { transactionId: insertedId, librechatUserId, credits }
+}
+
+/** Books the real cost of a reserved request and gives back the difference; 0 refunds it completely. */
+export async function settleMedia(db: Database, reservation: MediaReservation, costUsd: number): Promise<void> {
+  const credits = Math.max(0, Math.round(costUsd * CREDITS_PER_USD))
+  const transactions = db.librechat.collection('transactions')
+  if (credits === 0) {
+    await transactions.deleteOne({ _id: reservation.transactionId })
+  } else {
+    await transactions.updateOne(
+      { _id: reservation.transactionId },
+      { $set: { rawAmount: -credits, tokenValue: -credits, mediaStatus: 'charged', updatedAt: new Date() } },
+    )
+  }
+  const difference = credits - reservation.credits
+  if (difference !== 0) {
+    await db.librechat.collection('balances').updateOne({ user: reservation.librechatUserId }, { $inc: { tokenCredits: -difference } })
+  }
 }

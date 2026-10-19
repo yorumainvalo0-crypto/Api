@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { dirname, join, normalize, sep } from 'node:path'
@@ -30,6 +31,11 @@ button.on { border-color:var(--accent); color:var(--accent); font-weight:600; }
 #loading { position:absolute; inset:0; display:grid; place-items:center; color:var(--muted); }
 `
 
+/** Embeds stored numbers as JSON literals: never raw strings inside the inline script */
+function numbers(values: number[]): string {
+  return JSON.stringify(values.map((v) => (Number.isFinite(Number(v)) ? Number(v) : 0)))
+}
+
 function viewerScript(glbUrl: string, sizeMm: [number, number, number], minMm: [number, number, number]): string {
   return `
 import * as THREE from 'three';
@@ -55,8 +61,8 @@ camera.up.set(0, 0, 1);
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 
-const size = new THREE.Vector3(${sizeMm.join(',')});
-const min = new THREE.Vector3(${minMm.join(',')});
+const size = new THREE.Vector3(...${numbers(sizeMm)});
+const min = new THREE.Vector3(...${numbers(minMm)});
 const centre = min.clone().addScaledVector(size, 0.5);
 const radius = Math.max(size.length() / 2, 1);
 
@@ -112,6 +118,7 @@ function resize() {
 new ResizeObserver(resize).observe(stage); resize();
 renderer.setAnimationLoop(() => { controls.update(); renderer.render(scene, camera); });
 document.getElementById('fullscreen').addEventListener('click', () => document.documentElement.requestFullscreen?.());
+document.getElementById('version').addEventListener('change', (event) => { location.search = event.target.value; });
 `
 }
 
@@ -161,6 +168,12 @@ export function registerViewerRoutes(app: FastifyInstance, ctx: AppContext): voi
       imports: { three: `${base}/static/three/build/three.module.js`, 'three/addons/': `${base}/static/three/examples/jsm/` },
     })
 
+    const nonce = randomBytes(16).toString('base64')
+    reply.header(
+      'content-security-policy',
+      `default-src 'none'; script-src 'self' 'nonce-${nonce}'; style-src 'unsafe-inline'; img-src 'self' data: blob:; ` +
+        `connect-src 'self' blob:; base-uri 'none'; form-action 'none'; frame-ancestors 'self'`,
+    )
     return sendHtml(
       reply,
       `<!doctype html>
@@ -169,12 +182,12 @@ export function registerViewerRoutes(app: FastifyInstance, ctx: AppContext): voi
 <title>${escapeHtml(model.name)} v${version.version} · 3D-Ansicht</title>
 <link rel="icon" href="data:,">
 <style>${VIEWER_STYLE}</style>
-<script type="importmap">${importMap}</script>
+<script type="importmap" nonce="${nonce}">${importMap}</script>
 </head><body>
 <div id="app">
   <header>
     <h1>${escapeHtml(model.name)} <span style="color:var(--muted);font-weight:400">· ${formatMm(x)} × ${formatMm(y)} × ${formatMm(z)} mm</span></h1>
-    <select id="version" aria-label="Version" onchange="location.search=this.value">
+    <select id="version" aria-label="Version">
       ${versions.map((v) => `<option value="${escapeHtml(query(v.version))}" ${v.version === version.version ? 'selected' : ''}>Version ${v.version}</option>`).join('')}
     </select>
     ${downloads}
@@ -187,7 +200,7 @@ export function registerViewerRoutes(app: FastifyInstance, ctx: AppContext): voi
     <button id="fullscreen">Vollbild</button>
   </div>
 </div>
-<script type="module">${viewerScript(signedMediaUrl(config, files.glb, 30), version.info.size_mm, version.info.min_mm)}</script>
+<script type="module" nonce="${nonce}">${viewerScript(signedMediaUrl(config, files.glb, 30), version.info.size_mm, version.info.min_mm)}</script>
 </body></html>`,
     )
   })

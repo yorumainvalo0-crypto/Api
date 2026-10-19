@@ -227,7 +227,11 @@ export async function usageCsv(db: Database, range: Range, groupId: string | nul
       { $sort: { '_id.day': 1 } },
     ])
     .toArray()
-  const escape = (value: string) => (/[";\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value)
+  const escape = (raw: string) => {
+    // A leading = + - @ would make Excel evaluate the cell as a formula
+    const value = /^[=+\-@\t\r]/.test(raw) ? `'${raw}` : raw
+    return /[";\n]/.test(value) ? `"${value.replaceAll('"', '""')}"` : value
+  }
   const decimal = (value: number, digits: number) => value.toFixed(digits).replace('.', ',')
   const lines = ['Datum;Benutzer;Gruppe;Modell;Kosten USD;Tokens Eingabe;Tokens Ausgabe;Anfragen']
   for (const row of rows) {

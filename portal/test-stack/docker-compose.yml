@@ -24,6 +24,7 @@ services:
     image: portal-gateway:dev
     depends_on: [mongodb]
     env_file: gateway.env
+    networks: [default, code]
     volumes:
       - ./data/media:/data/media
     ports:
@@ -36,6 +37,8 @@ services:
       - SANDBOX_IMAGE=portal-sandbox:dev
       - CAD_SANDBOX_IMAGE=portal-cad-sandbox:dev
       - EXEC_TIMEOUT_SECONDS=30
+    # As in production: reachable only from LibreChat and the gateway
+    networks: [code]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       # Same path inside and outside: sandbox containers bind-mount sub-directories of it
@@ -46,6 +49,7 @@ services:
     image: registry.librechat.ai/librechat-ai/librechat:v0.8.8
     depends_on: [mongodb, mocks, portal-gateway, nginx, code-runner]
     env_file: test.env
+    networks: [default, code]
     environment:
       - HOST=0.0.0.0
       - MONGO_URI=mongodb://mongodb:27017/LibreChat
@@ -77,3 +81,7 @@ services:
       default:
         # The public host name, reachable from LibreChat like from a browser
         aliases: [portal.test]
+
+networks:
+  code:
+    internal: true

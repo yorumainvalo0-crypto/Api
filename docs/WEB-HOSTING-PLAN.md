@@ -314,6 +314,17 @@ Tokens (Einladung, Login) sind 128 Bit zufällig und werden **nur gehasht** gesp
 - Admin-API nur mit Admin-Sitzung + CSRF-Schutz; Audit-Log aller Admin-Aktionen.
 - MongoDB, Code-Interpreter, CAD-Runner und MCP nur im Docker-Netz; öffentlich ist ausschließlich nginx.
 - CAD-Runner ohne Netzwerkzugang, mit Ressourcen- und Zeitlimits (§6.7).
+- Umgesetzt in M8 (nach Sicherheitsprüfung des Codes):
+  - Client-IP nur aus dem von nginx angehängten Eintrag (gefälschte `X-Forwarded-For` hebeln Rate-Limits nicht aus).
+  - TOTP-Codes nur einmal gültig; nach 5 falschen Codes 15 Min. Sperre.
+  - Login-Links werden erst per Knopfdruck eingelöst (Link-Vorschauen in Messengern verbrauchen sie nicht).
+  - Abmelden mit CSRF-Schutz beendet die Gerätesitzung serverseitig.
+  - 3D-Viewer: Modelldaten aus der Sandbox werden streng geprüft, Seite mit Content-Security-Policy.
+  - Code-Runner liest Sandbox-Ausgaben nie über Symlinks, mit Größenlimit; Container-Logs auf 1 MB begrenzt.
+  - Code-Runner nur im internen Docker-Netz `code` (nur LibreChat und Gateway).
+  - Media-Kosten werden vor dem Aufruf atomar reserviert (parallele Anfragen können das Budget nicht überziehen),
+    höchstens 2 laufende Videos pro Person.
+  - CSV-Export entschärft Excel-Formeln.
 
 ## 7. Server & Betrieb
 
@@ -361,7 +372,7 @@ M3–M5 ersetzen dann CLI durch QR-Codes, M6–M7 runden ab.
 - [ ] 3D: Teil mit Maßvorgabe → STL/3MF/STEP stimmen (Maße im Slicer geprüft), Viewer zeigt Maße und Versionen
 - [ ] CAD-Runner: Code mit Netzwerkzugriff/Endlosschleife wird blockiert bzw. nach 60 s abgebrochen
 - [ ] Fable ist im Chat nicht auswählbar
-- [ ] Backup + Restore getestet, Monitoring aktiv
+- [ ] Backup + Restore getestet, Monitoring aktiv (Restore lokal getestet ✅, Skripte: [GO-LIVE.md](GO-LIVE.md))
 
 ## 10. Offene Punkte
 
@@ -372,4 +383,4 @@ M3–M5 ersetzen dann CLI durch QR-Codes, M6–M7 runden ab.
 5. Websuche für Claude gewünscht? (verursacht Zusatzkosten pro Suche)
 6. 3D-Druck: Welcher Drucker/Slicer (z. B. Bambu, Prusa) – für passende Toleranzen und Bauraum-Prüfung im CAD-Skill?
 
-Code und Konfiguration: [`portal/`](../portal/) · Fortschritt: [`PORTAL-PROGRESS.md`](PORTAL-PROGRESS.md)
+Code und Konfiguration: [`portal/`](../portal/) · Fortschritt: [`PORTAL-PROGRESS.md`](PORTAL-PROGRESS.md) · Inbetriebnahme: [`GO-LIVE.md`](GO-LIVE.md)

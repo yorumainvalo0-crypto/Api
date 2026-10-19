@@ -1,4 +1,5 @@
 import { randomUUID } from 'node:crypto'
+import { z } from 'zod'
 import type { Config } from './config.js'
 import type { Database } from './db.js'
 import { MediaError, type MediaFile, mediaFiles, storeMedia } from './media.js'
@@ -13,6 +14,22 @@ export interface CadInfo {
   triangles: number
   solids: number
 }
+
+const finite = z.number().finite()
+const vector = z.tuple([finite, finite, finite])
+
+/** info.json is written inside the sandbox, so user code controls it: accept plain numbers only. */
+export const cadInfoSchema = z
+  .object({
+    size_mm: vector,
+    min_mm: vector,
+    volume_mm3: finite,
+    area_mm2: finite,
+    watertight: z.boolean(),
+    triangles: z.number().int().nonnegative(),
+    solids: z.number().int().nonnegative(),
+  })
+  .strip()
 
 export interface CadModel {
   _id: string
@@ -76,7 +93,13 @@ export async function runCad(config: Config, code: string, formats: string[]): P
     signal: AbortSignal.timeout(150_000),
   })
   if (!res.ok) throw new MediaError(`CAD-Dienst nicht erreichbar (HTTP ${res.status}).`)
-  return (await res.json()) as RunnerResponse
+  const result = (await res.json()) as RunnerResponse
+  if (result.ok) {
+    const info = cadInfoSchema.safeParse(result.info)
+    if (!info.success) return { ...result, ok: false, info: null, files: {}, stderr: 'CAD-Export lieferte ungültige Modelldaten.' }
+    result.info = info.data as CadInfo
+  }
+  return result
 }
 
 /** Stores a successful CAD run as the next version of the model with this name in this chat. */
@@ -156,7 +179,7 @@ export function verifyViewerSignature(config: Config, modelId: string, expires: 
 }
 
 export function formatMm(value: number): string {
-  return value.toLocaleString('de-DE', { maximumFractionDigits: 2 })
+  return Number(value).toLocaleString('de-DE', { maximumFractionDigits: 2 })
 }
 
 export function describeInfo(info: CadInfo): string {

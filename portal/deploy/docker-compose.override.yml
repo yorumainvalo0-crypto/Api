@@ -15,6 +15,7 @@ services:
       - mongodb
       - portal-gateway
       - code-runner
+    networks: [default, code]
     volumes:
       - type: bind
         source: ./librechat.yaml
@@ -33,6 +34,7 @@ services:
     env_file: ./portal-gateway.env
     depends_on:
       - mongodb
+    networks: [default, code]
     volumes:
       # Generated images, audio and videos (uid 1000 must be able to write)
       - /opt/portal-data/media:/data/media
@@ -52,8 +54,14 @@ services:
       - EXEC_MEMORY=1g
       - MAX_PARALLEL=4
       - RETENTION_DAYS=7
+    # Only LibreChat and the gateway can reach it (it holds the Docker socket)
+    networks: [code]
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       # Same path inside and outside: sandbox containers bind-mount sub-directories of it
       - /opt/portal-data/code-work:/opt/portal-data/code-work
       - /opt/portal-data/code-store:/data/store
+
+networks:
+  code:
+    internal: true

@@ -34,6 +34,16 @@ export type RedeemResult =
   | { ok: true; user: PortalUser; link: LoginLink }
   | { ok: false; reason: 'invalid' | 'expired' | 'used' | 'revoked' | 'blocked' }
 
+/** Checks a login link without consuming it (the confirmation page is shown before redeeming). */
+export async function checkLoginLink(db: Database, token: string): Promise<RedeemResult | { ok: true }> {
+  const existing = await db.col.loginLinks.findOne({ tokenHash: hashToken(token) })
+  if (!existing) return { ok: false, reason: 'invalid' }
+  if (existing.revokedAt) return { ok: false, reason: 'revoked' }
+  if (existing.expiresAt <= new Date()) return { ok: false, reason: 'expired' }
+  if (existing.uses >= existing.maxUses) return { ok: false, reason: 'used' }
+  return { ok: true }
+}
+
 /** Atomically consumes one use of a login link. */
 export async function redeemLoginLink(db: Database, token: string): Promise<RedeemResult> {
   const tokenHash = hashToken(token)

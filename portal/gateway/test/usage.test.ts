@@ -101,6 +101,17 @@ describe('usage report', () => {
     expect(csv).toContain(';anna;Team;claude-opus-5-5;0,014000;1000;500;1')
     expect(csv).toContain(';ben;;media;0,040000;0;0;1')
   })
+
+  it('does not let a model name turn into an Excel formula', async () => {
+    const tx = usage(ben, '=HYPERLINK("http://x";"y")', 10, 0, yesterday, [1, 1])
+    const { insertedIds } = await env.db.librechat.collection('transactions').insertMany(tx)
+    try {
+      const csv = await usageCsv(env.db, resolveRange('7d'))
+      expect(csv).toContain(';ben;;"\'=HYPERLINK(""http://x"";""y"")";')
+    } finally {
+      await env.db.librechat.collection('transactions').deleteMany({ _id: { $in: Object.values(insertedIds) } })
+    }
+  })
 })
 
 describe('usage page', () => {

@@ -98,7 +98,10 @@ export async function adminLogin(page) {
   await page.fill('#password', ADMIN.password)
   await page.click('button[type="submit"]')
   await page.waitForURL(/\/portal\/admin\/totp/)
-  const admin = await withMongo((_lc, portal) => portal.collection('users').findOne({ username: ADMIN.username }))
+  // Each TOTP code works once; tests log in more often than every 30 s, so forget the last one
+  const admin = await withMongo((_lc, portal) =>
+    portal.collection('users').findOneAndUpdate({ username: ADMIN.username }, { $unset: { totpLastStep: '' } }),
+  )
   await page.fill('#code', totp(admin.totpSecret ?? admin.totpPendingSecret))
   await page.click('button[type="submit"]')
   await page.waitForURL(`${PUBLIC_URL}/portal/admin`)
@@ -128,6 +131,7 @@ export async function newLoginLink(adminPage, { note = '', maxUses = 1 } = {}) {
 /** Scans a login QR on a device: lands logged in in the LibreChat chat. */
 export async function loginWithLink(page, url) {
   await page.goto(url)
+  await page.click('#login-confirm')
   await page.waitForURL(/\/c\//, { timeout: 30_000 })
   await acceptTerms(page)
 }

@@ -105,11 +105,22 @@ export function totpCode(secret: string, timeMs = Date.now()): string {
   return String(binary % 1_000_000).padStart(6, '0')
 }
 
-/** Accepts the current code and one step before/after to tolerate clock drift. */
-export function verifyTotp(secret: string, code: string, timeMs = Date.now()): boolean {
+/**
+ * Returns the time step a code belongs to, accepting one step before/after for clock drift.
+ * Callers store the step so that a code cannot be used twice.
+ */
+export function totpStep(secret: string, code: string, timeMs = Date.now()): number | null {
   const normalized = code.replace(/\s+/g, '')
-  if (!/^\d{6}$/.test(normalized)) return false
-  return [-1, 0, 1].some((step) => safeEqual(totpCode(secret, timeMs + step * 30_000), normalized))
+  if (!/^\d{6}$/.test(normalized)) return null
+  const current = Math.floor(timeMs / 30_000)
+  for (const step of [current - 1, current, current + 1]) {
+    if (safeEqual(totpCode(secret, step * 30_000), normalized)) return step
+  }
+  return null
+}
+
+export function verifyTotp(secret: string, code: string, timeMs = Date.now()): boolean {
+  return totpStep(secret, code, timeMs) !== null
 }
 
 export function totpUri(secret: string, account: string, issuer: string): string {

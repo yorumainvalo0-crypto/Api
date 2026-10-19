@@ -151,6 +151,14 @@ describe('images', () => {
     expect(await balance()).toBe(5)
   })
 
+  it('parallel requests cannot spend more than the remaining budget', async () => {
+    await setBalance(0.5) // enough for two reservations of 0.20 USD, not three
+    const results = await Promise.all([1, 2, 3].map((n) => call('bild_erstellen', { prompt: `Paralleles Bild ${n}` })))
+    expect(results.filter((r) => r.isError)).toHaveLength(1)
+    expect(await balance()).toBeCloseTo(0.5 - 2 * 0.04, 9)
+    await setBalance(5)
+  })
+
   it('edits only images of the same person', async () => {
     const first = await call('bild_erstellen', { prompt: 'Ein Haus' })
     const id = text(first).match(/Bild-ID: (\S+)/)![1]!
@@ -188,7 +196,8 @@ describe('video', () => {
   it('runs asynchronously and is charged exactly once when finished', async () => {
     const started = await call('video_erstellen', { prompt: 'Wellen am Strand', dauer_sekunden: 5 })
     const id = text(started).match(/Video-ID: (\S+)/)![1]!
-    expect(await balance()).toBe(5)
+    // Reserved at submission, so parallel videos cannot overspend the budget
+    expect(await balance()).toBeCloseTo(5 - env.config.VIDEO_MIN_BALANCE_USD, 9)
 
     await pollVideoJobs(env.config, env.db) // in_progress
     expect(text(await call('video_status', { video_id: id }))).toContain('wird noch erstellt')

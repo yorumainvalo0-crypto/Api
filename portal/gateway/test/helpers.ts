@@ -78,7 +78,8 @@ export async function loginAdmin(env: TestEnv): Promise<Record<string, string>> 
     ...form({ username: ADMIN_USERNAME, password: ADMIN_PASSWORD, returnTo: '' }),
   })
   cookiesFrom(step1, jar)
-  const admin = await env.db.col.users.findOne({ username: ADMIN_USERNAME })
+  // Each TOTP code works once; tests log in more often than every 30 s, so forget the last one
+  const admin = await env.db.col.users.findOneAndUpdate({ username: ADMIN_USERNAME }, { $unset: { totpLastStep: '' } })
   const secret = admin!.totpSecret ?? admin!.totpPendingSecret!
   const step2 = await env.app.inject({
     method: 'POST',

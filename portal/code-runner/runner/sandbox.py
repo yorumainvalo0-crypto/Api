@@ -6,11 +6,13 @@ import hashlib
 import json
 import os
 import shutil
+import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 
 import docker
 from docker.errors import NotFound
+from docker.types import LogConfig
 
 from .storage import FileMeta, Store, nanoid, safe_relative_path
 
@@ -76,6 +78,23 @@ def _hand_over(data_dir: Path) -> None:
             path.chmod(0o777 if path.is_dir() else 0o666)
 
 
+def _read_regular(path: Path, limit: int) -> bytes | None:
+    """Reads a file written by the sandbox: never through a symlink, never more than limit bytes.
+
+    The sandbox controls /mnt/data, so a planted symlink must not make the runner (root) read
+    its own files.
+    """
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+    except OSError:
+        return None
+    with os.fdopen(fd, "rb") as handle:
+        info = os.fstat(handle.fileno())
+        if not stat.S_ISREG(info.st_mode) or info.st_size > limit:
+            return None
+        return handle.read(limit + 1)[:limit]
+
+
 def _truncate(data: bytes, limit: int) -> tuple[str, bool]:
     if len(data) <= limit:
         return data.decode("utf-8", errors="replace"), False
@@ -132,11 +151,19 @@ class Sandbox:
             stdout, stderr, status = self._execute(
                 ["python3", "/code/wrapper.py"], data_dir, code_dir, image=self.cad_image, limits=self.cad_limits
             )
-            info_path = data_dir / "info.json"
-            if status == "TO" or not info_path.is_file():
+            info_raw = _read_regular(data_dir / "info.json", 64 * 1024)
+            if status == "TO" or info_raw is None:
                 return CadResult(False, stdout, stderr or "CAD-Ausführung ohne Ergebnis beendet.")
-            files = {name: (data_dir / name).read_bytes() for name in CAD_OUTPUTS if (data_dir / name).is_file()}
-            return CadResult(True, stdout, stderr, json.loads(info_path.read_text()), files)
+            try:
+                info = json.loads(info_raw)
+            except ValueError:
+                return CadResult(False, stdout, "CAD-Export lieferte ungültige Modelldaten.")
+            files = {}
+            for name in CAD_OUTPUTS:
+                data = _read_regular(data_dir / name, self.cad_limits.max_file_bytes)
+                if data is not None:
+                    files[name] = data
+            return CadResult(True, stdout, stderr, info if isinstance(info, dict) else None, files)
         finally:
             shutil.rmtree(job, ignore_errors=True)
 
@@ -210,6 +237,8 @@ class Sandbox:
             security_opt=["no-new-privileges"],
             environment={"HOME": "/mnt/data", "MPLBACKEND": "Agg"},
             labels={"portal.code-runner": "exec"},
+            # Keeps docker's log file (and what logs() loads into memory) small
+            log_config=LogConfig(type=LogConfig.types.JSON, config={"max-size": "1m", "max-file": "1"}),
         )
         status = None
         notes: list[str] = []

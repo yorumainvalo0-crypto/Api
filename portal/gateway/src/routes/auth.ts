@@ -1,15 +1,18 @@
-import type { FastifyInstance } from 'fastify'
+import type { FastifyInstance, FastifyReply } from 'fastify'
 import type Provider from 'oidc-provider'
 import { errors } from 'oidc-provider'
-import { SESSION_COOKIE, createDeviceSession, deviceLabel } from '../devices.js'
+import { SESSION_COOKIE, createDeviceSession, deviceLabel, revokeDevice } from '../devices.js'
 import { html, page } from '../html.js'
-import { redeemLoginLink } from '../login-links.js'
-import { generateTotpSecret, sign, totpUri, verifyPassword, verifyTotp, safeEqual } from '../security.js'
+import { checkLoginLink, redeemLoginLink } from '../login-links.js'
+import { generateTotpSecret, sign, totpStep, totpUri, verifyPassword, safeEqual } from '../security.js'
 import { audit } from '../users.js'
-import { type AppContext, cookieOptions, currentSession, field, qrSvg, sendHtml } from '../web.js'
+import { type AppContext, checkCsrf, cookieOptions, currentSession, field, qrSvg, sendHtml } from '../web.js'
 
 const PENDING_COOKIE = 'portal_pending'
 const PENDING_TTL_MS = 10 * 60_000
+/** Wrong TOTP codes (after a correct password) before the account waits TOTP_LOCK_MS */
+const TOTP_MAX_FAILURES = 5
+const TOTP_LOCK_MS = 15 * 60_000
 
 const REASONS: Record<string, string> = {
   invalid: 'Dieser Login-Code ist ungültig.',
@@ -32,15 +35,36 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext, provid
   app.get(`${base}/health`, async () => ({ ok: true }))
 
   // --- QR login link: /portal/l/:token ---
+  // GET only shows a button: link previews in messengers and mail scanners must not use up the link
+  function linkError(reply: FastifyReply, reason: keyof typeof REASONS) {
+    return sendHtml(
+      reply,
+      page('Login', html`<h1>Anmeldung nicht möglich</h1><div class="card"><p class="error">${REASONS[reason]}</p></div>`, { narrow: true }),
+      410,
+    )
+  }
+
   app.get<{ Params: { token: string } }>(`${base}/l/:token`, async (req, reply) => {
+    const status = await checkLoginLink(db, req.params.token)
+    if (!status.ok) return linkError(reply, status.reason)
+    reply.header('referrer-policy', 'no-referrer')
+    return sendHtml(
+      reply,
+      page(
+        'Anmelden',
+        html`<h1>A-B Cloud AI Portal</h1>
+          <form method="post" class="card">
+            <p>Mit diesem Login-Code wird dieses Gerät angemeldet.</p>
+            <button type="submit" id="login-confirm">Auf diesem Gerät anmelden</button>
+          </form>`,
+        { narrow: true },
+      ),
+    )
+  })
+
+  app.post<{ Params: { token: string } }>(`${base}/l/:token`, async (req, reply) => {
     const result = await redeemLoginLink(db, req.params.token)
-    if (!result.ok) {
-      return sendHtml(
-        reply,
-        page('Login', html`<h1>Anmeldung nicht möglich</h1><div class="card"><p class="error">${REASONS[result.reason]}</p></div>`, { narrow: true }),
-        410,
-      )
-    }
+    if (!result.ok) return linkError(reply, result.reason)
     const userAgent = req.headers['user-agent'] ?? ''
     const { token } = await createDeviceSession(db, result.user, {
       label: result.link.note || deviceLabel(userAgent),
@@ -49,7 +73,7 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext, provid
     })
     await audit(db, result.user.username, 'login-link.redeemed', result.user._id, { linkId: result.link._id })
     reply.setCookie(SESSION_COOKIE, token, cookieOptions(config, sessionMaxAge))
-    return reply.redirect(`${config.PUBLIC_URL}/`)
+    return reply.redirect(`${config.PUBLIC_URL}/`, 303)
   })
 
   // --- Admin login (password, then TOTP) ---
@@ -136,13 +160,29 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext, provid
     if (!user) return reply.redirect(`${base}/admin/login`)
     const code = field(req.body, 'code')
     const returnTo = field(req.body, 'returnTo')
-    const secret = user.totpSecret ?? user.totpPendingSecret
-    if (!secret || !verifyTotp(secret, code)) {
-      await audit(db, user.username, 'admin.totp.failed', user._id)
-      return sendHtml(reply, await totpPage(user._id, returnTo, 'Code falsch oder abgelaufen.'), 401)
+    const failures = await db.col.audit.countDocuments({
+      target: user._id,
+      action: 'admin.totp.failed',
+      at: { $gt: new Date(Date.now() - TOTP_LOCK_MS) },
+    })
+    if (failures >= TOTP_MAX_FAILURES) {
+      reply.clearCookie(PENDING_COOKIE, { path: base })
+      return sendHtml(reply, adminLoginPage('', 'Zu viele falsche Codes. Bitte 15 Minuten warten.'), 429)
     }
-    if (!user.totpSecret) {
-      await db.col.users.updateOne({ _id: user._id }, { $set: { totpSecret: secret, totpPendingSecret: null } })
+    const secret = user.totpSecret ?? user.totpPendingSecret
+    const step = secret ? totpStep(secret, code) : null
+    // Each code works once: the step must be newer than the last accepted one
+    const accepted =
+      step !== null &&
+      (
+        await db.col.users.updateOne(
+          { _id: user._id, $or: [{ totpLastStep: { $exists: false } }, { totpLastStep: { $lt: step } }] },
+          { $set: { totpLastStep: step, ...(user.totpSecret ? {} : { totpSecret: secret, totpPendingSecret: null }) } },
+        )
+      ).modifiedCount === 1
+    if (!accepted) {
+      await audit(db, user.username, 'admin.totp.failed', user._id)
+      return sendHtml(reply, await totpPage(user._id, returnTo, 'Code falsch, abgelaufen oder schon benutzt.'), 401)
     }
     const userAgent = req.headers['user-agent'] ?? ''
     const { token, device } = await createDeviceSession(db, user, {
@@ -158,6 +198,11 @@ export function registerAuthRoutes(app: FastifyInstance, ctx: AppContext, provid
   })
 
   app.post(`${base}/logout`, async (req, reply) => {
+    const session = await currentSession(ctx, req)
+    if (session) {
+      if (!checkCsrf(config, session, req.body)) return reply.code(403).send('Ungültiges Formular.')
+      await revokeDevice(db, session.device._id)
+    }
     reply.clearCookie(SESSION_COOKIE, { path: base })
     return reply.redirect(`${base}/admin/login`)
   })

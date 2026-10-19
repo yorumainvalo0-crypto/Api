@@ -53,6 +53,8 @@ def create_app(store: Store, sandbox: Sandbox, *, max_parallel: int = 4, max_upl
             for f in body.get("files") or []
             if isinstance(f, dict)
         ]
+        # Input files must be valid store ids (they become paths below the store)
+        inputs = [f for f in inputs if ID_RE.match(f.session_id) and ID_RE.match(f.file_id)]
         owner = str(body.get("user_id") or request.headers.get("user-id") or "")
 
         def run() -> ExecResult:
