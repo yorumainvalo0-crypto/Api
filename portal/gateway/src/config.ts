@@ -21,6 +21,11 @@ const schema = z.object({
   /** Device sessions stay valid this long */
   DEVICE_SESSION_DAYS: z.coerce.number().int().positive().default(180),
   // --- Media tools via OpenRouter (image, speech, video) ---
+  /** Image, speech and video tools via OpenRouter; off until the admin decides on the models */
+  MEDIA_ENABLED: z
+    .enum(['true', 'false'])
+    .default('false')
+    .transform((v) => v === 'true'),
   OPENROUTER_API_KEY: z.string().default(''),
   OPENROUTER_BASE_URL: z.url().default('https://openrouter.ai/api/v1'),
   MEDIA_DIR: z.string().default('/data/media'),

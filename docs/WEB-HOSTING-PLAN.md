@@ -21,7 +21,7 @@ generieren und **technische 3D-Modelle (3D-Druck/CAD) mit 3D-Vorschau** erstelle
 | A6  | **Admin-Dashboard**: wer hat wann wie viel verbraucht – USD und Tokens                                             | Gateway: Dashboard (§6.5)               |
 | A7  | Jeder wählt **Modell und Aufwand (Effort)** selbst, Standard **Claude Opus 5.5, Effort „medium“**                  | LibreChat Model-Specs (§4.3)            |
 | A8  | **Ausgabe aller Dateitypen** (docx, xlsx, pptx, pdf, csv, zip, Bilder, Code …)                                     | Code-Interpreter + Skills (§5)          |
-| A9  | **Bild-, Sprach- und Video-Generierung** bleibt – über **OpenRouter-Key**, ebenfalls aus dem USD-Budget bezahlt    | Media-Dienst (MCP) (§6.6)               |
+| A9  | **Bild-, Sprach- und Video-Generierung** über **OpenRouter-Key**, aus dem USD-Budget bezahlt – **vorerst aus** (`MEDIA_ENABLED`) | Media-Dienst (MCP) (§6.6)               |
 | A10 | OpenRouter-Modelle im Chat **vorerst nicht anzeigen** (später zuschaltbar)                                         | Konfiguration (§4.1)                    |
 | A11 | Docker-Port nach Vorgabe des Admins                                                                                | Port **45012** des alten Portals (§3)   |
 | A12 | AI erzeugt **technische 3D-Teile** (maßgenau, für 3D-Druck) mit **interaktiver 3D-Vorschau** im Web                | CAD-Dienst + 3D-Viewer (§6.7)           |
@@ -388,8 +388,8 @@ M3–M5 ersetzen dann CLI durch QR-Codes, M6–M7 runden ab.
 1. ~~Docker-Port~~ → aus der alten Compose: 45012 (portal-nginx übernimmt ihn).
 2. Wo soll der Gateway-Code liegen: eigenes Repository (empfohlen) oder Ordner in diesem Repo?
 3. Standardbudgets: pro Person z. B. 5 USD/Monat? Reset monatlich zum 1. oder 30 Tage ab Beitritt?
-4. Zugriff auf den Code/die Config des alten Portals (für OpenRouter-Modelle Bild/Sprache/Video).
+4. ~~Media-Modelle~~ → Bild/Sprache/Video vorerst aus (fertig gebaut und getestet, einschaltbar mit `MEDIA_ENABLED=true`).
 5. ~~Websuche~~ → entschieden: Anthropic-Websuche an, 0,01 USD pro Suche vom Budget.
-6. 3D-Druck: Welcher Drucker/Slicer (z. B. Bambu, Prusa) – für passende Toleranzen und Bauraum-Prüfung im CAD-Skill?
+6. ~~3D-Drucker/Slicer~~ → Slicen macht der Admin selbst; der CAD-Skill bleibt bei allgemeinen FDM-Regeln.
 
 Code und Konfiguration: [`portal/`](../portal/) · Fortschritt: [`PORTAL-PROGRESS.md`](PORTAL-PROGRESS.md) · Inbetriebnahme: [`GO-LIVE.md`](GO-LIVE.md)

@@ -14,7 +14,8 @@ unverändert – Umschalten = alte Compose stoppen, neue starten (ca. 1 Minute A
 ## 0. Voraussetzungen
 
 - Docker Engine + **Docker Compose v2.24+** (`docker compose version`)
-- Anthropic-API-Key, OpenRouter-Key (nur Bild/Sprache/Video), Admin-Benutzername + Passwort (≥ 12 Zeichen)
+- Anthropic-API-Key, Admin-Benutzername + Passwort (≥ 12 Zeichen)
+  (Bild/Sprache/Video über OpenRouter ist vorerst aus – Key nicht nötig)
 - Empfohlen: 8 vCPU / 16 GB RAM, ≥ 40 GB frei (Images ca. 6 GB): `nproc; free -h; df -h /`
 
 Kurz prüfen:
@@ -91,9 +92,8 @@ mkdir -p portal-nginx && cp /opt/portal/portal/deploy/nginx/portal.conf.template
 
 # Schlüssel nicht in die Shell-History schreiben:
 read -rsp 'Anthropic-Key: ' ANTHROPIC_API_KEY; echo
-read -rsp 'OpenRouter-Key: ' OPENROUTER_API_KEY; echo
 read -rsp 'Admin-Passwort: ' PORTAL_ADMIN_PASSWORD; echo
-export ANTHROPIC_API_KEY OPENROUTER_API_KEY PORTAL_ADMIN_PASSWORD
+export ANTHROPIC_API_KEY PORTAL_ADMIN_PASSWORD
 PORTAL_ADMIN_USERNAME=<admin> python3 /opt/portal/portal/deploy/scripts/setup-env.py
 ```
 
@@ -138,7 +138,7 @@ Server-nginx und TLS-Zertifikat bleiben, wie sie sind.
 - [ ] Gruppe anlegen, Einladung für 1 Person / 1 Stunde → QR mit dem Handy scannen, Benutzernamen wählen
 - [ ] Im Chat: Opus 5.5 / mittel ist vorausgewählt, Antwort kommt; Guthaben sinkt
 - [ ] PDF hochladen und zusammenfassen lassen; Excel-Datei erzeugen und herunterladen
-- [ ] „Erstelle ein Bild …“ → Bild im Chat, Kosten im Dashboard (`/portal/admin/usage`)
+- [ ] „Wie ist das Wetter heute in Berlin?“ → Websuche, 0,01 USD im Dashboard (`/portal/admin/usage`)
 - [ ] „Halterung 60 × 40 × 10 mm mit zwei 8-mm-Löchern“ → 3D-Ansicht am Handy, STL-Download
 - [ ] Login-QR für die Testperson auf einem zweiten Gerät → gleiche Chats sichtbar
 - [ ] Von außen nicht erreichbar: `curl -m5 http://88.99.138.164:45012`, `:45443` (altes Portal), `:3080`, `:27017`, `:3000`
@@ -158,7 +158,8 @@ crontab -e
 - Restore (getestet): `docker compose stop api portal-gateway && restore.sh <STAMP>` → `docker compose up -d`
 - **Anthropic Console:** monatliches Ausgabenlimit setzen; **Websuche für die Organisation erlauben**
   (sonst lehnt die API Anfragen mit Websuche ab – im Smoke-Test „Wie ist das Wetter heute in Berlin?“ fragen).
-- **OpenRouter:** Guthaben-/Key-Limit setzen (Bild/Sprache/Video).
+- **Bild/Sprache/Video später einschalten:** in `portal-gateway.env` `MEDIA_ENABLED=true` und
+  `OPENROUTER_API_KEY=…` setzen, `docker compose up -d portal-gateway`; bei OpenRouter ein Key-Limit setzen.
 
 ## 11. Altes Portal stoppen
 

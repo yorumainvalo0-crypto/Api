@@ -14,7 +14,7 @@ const app = await buildApp({ config, db, logger: true })
 if (admin) app.log.info(`created first admin "${admin.username}"`)
 const stopJobs = startBudgetJobs(db, (error) => app.log.error({ err: error }, 'budget job failed'))
 const mediaTimer = setInterval(() => {
-  pollVideoJobs(config, db).catch((error) => app.log.error({ err: error }, 'video job failed'))
+  if (config.MEDIA_ENABLED) pollVideoJobs(config, db).catch((error) => app.log.error({ err: error }, 'video job failed'))
   billWebSearches(config, db).catch((error) => app.log.error({ err: error }, 'web search billing failed'))
 }, 15_000)
 const pruneTimer = setInterval(() => {

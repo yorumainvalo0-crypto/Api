@@ -62,6 +62,8 @@ gateway = {
     "PORTAL_ADMIN_PASSWORD": "test-admin-password",
     "USER_EMAIL_DOMAIN": "users.portal.test",
     "COOKIE_SECURE": "true",
+    # Off by default in production; the test suite keeps the media tools covered
+    "MEDIA_ENABLED": "true",
     "OPENROUTER_API_KEY": "sk-or-test",
     "OPENROUTER_BASE_URL": "http://mocks:8080/api/v1",
     "MEDIA_DIR": "/data/media",

@@ -24,11 +24,17 @@ MongoDB und Test-Doubles für Anthropic/OpenRouter). Auf dem Hetzner-Server ist 
 
 ## Wartet auf dich
 
-- **Media-Modelle** prüfen/festlegen (Standard: Bilder `google/gemini-2.5-flash-image`, Sprache
-  `openai/gpt-4o-mini-tts`, Video `google/veo-3.1`) – gern die Modelle aus dem alten Portal nennen.
-- **3D-Drucker/Slicer** (z. B. Bambu, Prusa) – dann passe ich Toleranzen und Bauraum im CAD-Skill an.
+- Nichts mehr für die Inbetriebnahme. Später optional: Bild/Sprache/Video einschalten (`MEDIA_ENABLED=true` + OpenRouter-Key).
 
 ## Log
+
+### 19.10.2026 – Bild/Sprache/Video vorerst aus
+
+- Neue Einstellung `MEDIA_ENABLED` (Standard: aus). Claude bekommt dann nur Kontostand und 3D-Teile als
+  Portal-Werkzeuge, ein OpenRouter-Key ist nicht nötig. Einschalten später mit `MEDIA_ENABLED=true` +
+  `OPENROUTER_API_KEY` – die Funktionen bleiben im Test-Stack eingeschaltet und weiter getestet.
+- 3D-Druck: Slicen machst du selbst, der CAD-Skill bleibt bei allgemeinen FDM-Regeln.
+- **Tests:** 65 Gateway-Tests grün (neu: ohne Einstellung bietet das Gateway keine Bild-/Video-Werkzeuge an).
 
 ### 19.10.2026 – Port 45012 aus der alten Compose übernommen
 

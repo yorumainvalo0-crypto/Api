@@ -36,7 +36,11 @@ describe('MCP endpoint', () => {
   it('lists tools without a user (LibreChat tool discovery)', async () => {
     const res = await rpc('tools/list', {}, { 'x-user-id': '{{LIBRECHAT_USER_ID}}' })
     expect(res.statusCode).toBe(200)
-    expect(res.json().result.tools.map((t: { name: string }) => t.name)).toContain('konto_status')
+    const names = res.json().result.tools.map((t: { name: string }) => t.name)
+    expect(names).toEqual(expect.arrayContaining(['konto_status', 'cad_erstellen']))
+    // Image, speech and video stay off until MEDIA_ENABLED=true
+    expect(names).not.toContain('bild_erstellen')
+    expect(names).not.toContain('video_erstellen')
   })
 
   it('answers konto_status for the LibreChat user behind X-User-ID', async () => {

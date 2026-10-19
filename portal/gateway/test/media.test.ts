@@ -68,6 +68,7 @@ function startOpenRouterMock(): Promise<string> {
 beforeAll(async () => {
   const baseUrl = await startOpenRouterMock()
   env = await createTestEnv({
+    MEDIA_ENABLED: 'true',
     OPENROUTER_API_KEY: 'sk-or-test',
     OPENROUTER_BASE_URL: baseUrl,
     MEDIA_DIR: await mkdtemp(join(tmpdir(), 'media-')),

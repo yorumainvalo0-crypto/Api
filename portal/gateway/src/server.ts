@@ -61,7 +61,7 @@ export async function buildApp({ config, db, logger = false }: BuildOptions): Pr
     registerUsageRoutes(web, ctx)
     registerFileRoutes(web, ctx)
     registerViewerRoutes(web, ctx)
-    registerMcpRoute(web, ctx, [accountStatusTool, ...mediaTools, createCadTool])
+    registerMcpRoute(web, ctx, [accountStatusTool, ...(config.MEDIA_ENABLED ? mediaTools : []), createCadTool])
   })
 
   return app
