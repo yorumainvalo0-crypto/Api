@@ -8,6 +8,8 @@ import { registerMcpRoute } from './mcp.js'
 import { createProvider } from './oidc.js'
 import { registerAdminRoutes } from './routes/admin.js'
 import { registerAuthRoutes } from './routes/auth.js'
+import { registerGroupRoutes } from './routes/groups.js'
+import { registerJoinRoutes } from './routes/join.js'
 import { accountStatusTool } from './tools/account.js'
 import type { AppContext } from './web.js'
 
@@ -48,6 +50,8 @@ export async function buildApp({ config, db, logger = false }: BuildOptions): Pr
     await web.register(formbody)
     registerAuthRoutes(web, ctx, provider)
     registerAdminRoutes(web, ctx)
+    registerGroupRoutes(web, ctx)
+    registerJoinRoutes(web, ctx)
     registerMcpRoute(web, ctx, [accountStatusTool])
   })
 

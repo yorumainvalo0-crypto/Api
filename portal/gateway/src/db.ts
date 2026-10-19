@@ -54,6 +54,33 @@ export interface LoginLink {
   createdAt: Date
 }
 
+export interface Group {
+  _id: string
+  name: string
+  defaultStartBudgetUsd: number
+  defaultMonthlyBudgetUsd: number
+  createdBy: string
+  createdAt: Date
+}
+
+export interface Invite {
+  _id: string
+  groupId: string
+  /** SHA-256 for lookup; the token itself is kept encrypted so the QR can be shown again */
+  tokenHash: string
+  tokenEncrypted: string
+  maxUses: number
+  uses: number
+  validFrom: Date
+  validUntil: Date
+  startBudgetUsd: number
+  monthlyBudgetUsd: number
+  note: string
+  revokedAt: Date | null
+  createdBy: string
+  createdAt: Date
+}
+
 export interface AuditEntry {
   at: Date
   actor: string
@@ -81,6 +108,8 @@ export interface Collections {
   users: Collection<PortalUser>
   devices: Collection<Device>
   loginLinks: Collection<LoginLink>
+  groups: Collection<Group>
+  invites: Collection<Invite>
   audit: Collection<AuditEntry>
   oidc: Collection<OidcRecord>
   settings: Collection<Settings>
@@ -102,6 +131,8 @@ export async function connectDatabase(config: Pick<Config, 'MONGO_URI' | 'PORTAL
     users: portal.collection('users'),
     devices: portal.collection('devices'),
     loginLinks: portal.collection('loginLinks'),
+    groups: portal.collection('groups'),
+    invites: portal.collection('invites'),
     audit: portal.collection('audit'),
     oidc: portal.collection('oidc'),
     settings: portal.collection('settings'),
@@ -124,6 +155,9 @@ async function ensureIndexes(col: Collections): Promise<void> {
     col.devices.createIndex({ userId: 1 }),
     col.loginLinks.createIndex({ tokenHash: 1 }, { unique: true }),
     col.loginLinks.createIndex({ userId: 1 }),
+    col.groups.createIndex({ name: 1 }, { unique: true }),
+    col.invites.createIndex({ tokenHash: 1 }, { unique: true }),
+    col.invites.createIndex({ groupId: 1 }),
     col.audit.createIndex({ at: -1 }),
     col.oidc.createIndex({ expiresAt: 1 }, { expireAfterSeconds: 0 }),
     col.oidc.createIndex({ model: 1, uid: 1 }, { sparse: true }),

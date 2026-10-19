@@ -1,4 +1,6 @@
 import {
+  createCipheriv,
+  createDecipheriv,
   createHash,
   createHmac,
   randomBytes,
@@ -44,6 +46,24 @@ export async function verifyPassword(password: string, stored: string): Promise<
   const expected = Buffer.from(key, 'base64')
   const actual = await scrypt(password, Buffer.from(salt, 'base64'), expected.length, SCRYPT)
   return timingSafeEqual(actual, expected)
+}
+
+/** AES-256-GCM with a key derived from the portal secret (for values that must be shown again). */
+export function encrypt(secret: string, plaintext: string): string {
+  const key = createHash('sha256').update(`enc:${secret}`).digest()
+  const iv = randomBytes(12)
+  const cipher = createCipheriv('aes-256-gcm', key, iv)
+  const data = Buffer.concat([cipher.update(plaintext, 'utf8'), cipher.final()])
+  return [iv, cipher.getAuthTag(), data].map((b) => b.toString('base64url')).join('.')
+}
+
+export function decrypt(secret: string, value: string): string {
+  const [iv, tag, data] = value.split('.').map((part) => Buffer.from(part, 'base64url'))
+  if (!iv || !tag || !data) throw new Error('invalid ciphertext')
+  const key = createHash('sha256').update(`enc:${secret}`).digest()
+  const decipher = createDecipheriv('aes-256-gcm', key, iv)
+  decipher.setAuthTag(tag)
+  return Buffer.concat([decipher.update(data), decipher.final()]).toString('utf8')
 }
 
 /** HMAC used for CSRF tokens bound to a session. */

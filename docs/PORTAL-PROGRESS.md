@@ -13,8 +13,8 @@ MongoDB und Test-Doubles für Anthropic/OpenRouter). Auf dem Hetzner-Server ist 
 | M1      | LibreChat-Basis (Claude, Model-Specs, Guthaben)      | ✅ fertig       | ✅ 5/5 |
 | M2      | Code-Ausführung + Datei-Skills                       | ✅ fertig       | ✅ 11 + 2 |
 | M3      | Gateway-Kern: Login, Admin, Login-QR, Geräte         | ✅ fertig       | ✅ 25 + 5 |
-| M4      | Gruppen + Einladungs-QR                              | ⏳ in Arbeit    |      |
-| M5      | Budgets in USD                                       | offen          |      |
+| M4      | Gruppen + Einladungs-QR                              | ✅ fertig       | ✅ 6 + 4 |
+| M5      | Budgets in USD                                       | ⏳ in Arbeit    |      |
 | M6      | Admin-Dashboard                                      | offen          |      |
 | M7      | Media (Bild/Sprache/Video via OpenRouter)            | offen          |      |
 | M7b     | CAD-Dienst + 3D-Viewer                               | offen          |      |
@@ -28,6 +28,23 @@ MongoDB und Test-Doubles für Anthropic/OpenRouter). Auf dem Hetzner-Server ist 
   **nicht** vom Guthaben ab. Bis zur Entscheidung: in der Anthropic Console für den Workspace abschalten.
 
 ## Log
+
+### 19.10.2026 – M4 fertig (Gruppen + Einladungs-QR)
+
+- Admin-Bereich **Gruppen & Einladungen**: Gruppe anlegen (mit Standard-Start- und Monatsbudget),
+  Einladung erstellen mit **Anzahl Personen**, **gültig ab / bis** (deutsche Zeit), Budgets und Notiz.
+  Der **QR-Code** kann jederzeit wieder angezeigt und **gedruckt** werden; Einladungen lassen sich
+  zurückziehen. Pro Gruppe: Liste der Einladungen (z. B. „2 / 3 Plätze“) und der Mitglieder.
+- **Beitritt per QR:** Handy scannt → Seite „Du wurdest in die Gruppe … eingeladen“ → Benutzername
+  wählen → direkt im Chat. Der Account bekommt Gruppe und Budgets der Einladung.
+- Sicher gegen gleichzeitiges Scannen: Plätze werden atomar vergeben. Ist der Name schon vergeben
+  oder ungültig, wird der Platz zurückgegeben.
+- **Tests:** 6 neue Gateway-Tests (5 gleichzeitige Beitritte bei 3 Plätzen → genau 3; Zeitfenster;
+  Widerruf; vergebener Name; Sommer-/Winterzeit) + 4 Browser-Tests auf Handy-Größe (2 Personen treten
+  bei, die 3. wird abgewiesen, vergebener Name kostet keinen Platz). Alles grün.
+- Screenshots: [Handy – Beitritt](screenshots/handy-beitritt.png) ·
+  [Admin – Einladung](screenshots/admin-einladung.png)
+
 
 ### 19.10.2026 – M2 fertig (Code-Ausführung, Dateiausgabe, Skills)
 
