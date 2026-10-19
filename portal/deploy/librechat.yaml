@@ -111,7 +111,10 @@ mcpServers:
     url: http://portal-gateway:8080/portal/mcp
     headers:
       Authorization: "Bearer ${PORTAL_MCP_TOKEN}"
+    # Sent with every tool call so the gateway knows whose budget to use
+    requestHeaders:
       X-User-ID: "{{LIBRECHAT_USER_ID}}"
+      X-Conversation-Id: "{{LIBRECHAT_BODY_CONVERSATIONID}}"
 
 fileConfig:
   endpoints:
